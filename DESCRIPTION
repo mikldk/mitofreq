@@ -1,0 +1,28 @@
+Package: mitofreq
+Version: 0.0.1.9010
+Title: MitoFREQ
+Authors@R: c(
+    person(given = "Mikkel Meyer", family = "Andersen",
+        email = "mikl@math.aau.dk", role = c("aut", "cre", "cph"))
+  )
+Maintainer: Mikkel Meyer Andersen <mikl@math.aau.dk>
+Encoding: UTF-8
+Description: A Novel Approach for Mitogenome Frequency Estimation from Top-level Haplogroups and SNVs
+Depends: 
+  R (>= 3.0),
+  methods,
+  tibble,
+  shiny,
+  DT
+License: GPL
+URL: https://github.com/mikldk/mitofreq
+BugReports: https://github.com/mikldk/mitofreq/issues
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.2.3
+LazyData: true
+Suggests: 
+    knitr,
+    rmarkdown,
+    testthat (>= 3.0.0)
+VignetteBuilder: knitr
+Config/testthat/edition: 3

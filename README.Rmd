@@ -1,0 +1,29 @@
+---
+output: github_document
+---
+
+# MitoFREQ: A Novel Approach for Mitogenome Frequency Estimation from Top-level Haplogroups and SNVs
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE}
+library(mitofreq)
+```
+
+
+```{r}
+head(d_helix_TLHG_freq)
+```
+
+```{r}
+head(d_helix_positioninfo)
+xtabs(~ ExcludeReason, d_helix_positioninfo)
+```
+
+
+```{r}
+head(d_helix_SNV_freq_long)
+```
+
