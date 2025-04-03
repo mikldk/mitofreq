@@ -48,8 +48,12 @@ po/*~
 # RStudio Connect folder
 rsconnect/
 
+renv/
+
 README.html
 #docs
 inst/doc
 /doc/
 /Meta/
+
+
