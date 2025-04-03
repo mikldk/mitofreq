@@ -1,5 +1,5 @@
 Package: mitofreq
-Version: 0.0.1.9010
+Version: 0.0.1.9011
 Title: MitoFREQ
 Authors@R: c(
     person(given = "Mikkel Meyer", family = "Andersen",
