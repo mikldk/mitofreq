@@ -4,12 +4,14 @@
 \alias{extend_profile_to_helix_positions}
 \title{Extend profile to all Helix positions}
 \usage{
-extend_profile_to_helix_positions(variants, tlhg)
+extend_profile_to_helix_positions(variants, tlhg, range = 1:16569)
 }
 \arguments{
 \item{variants}{Vector of variants}
 
 \item{tlhg}{Top-level haplogroup}
+
+\item{range}{Positions range (default = 1:16569)}
 }
 \description{
 Extend profile to all Helix positions

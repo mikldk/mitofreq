@@ -7,19 +7,7 @@ library(stringi)
 library(jsonlite)
 
 ################################################################################
-# Column must be named HG
-rename_TLHGs <- function(d) {
-  d |> 
-    mutate(HG = case_when(
-      HG == "X + S" ~ "X",
-      HG == "L4 + L5 + L6" ~ "L4-6",
-      HG == "L4" ~ "L4-6",
-      HG == "L5" ~ "L4-6",
-      HG == "L6" ~ "L4-6",
-      HG == "R" | HG == "B" ~ "R/B",
-      TRUE ~ HG
-    )) 
-}
+
 ################################################################################
 
 helix_db_file <- tempfile()
@@ -48,10 +36,10 @@ d_HG_n_N <- readxl::read_excel(helix_suppmat_file,
 d_TLHG_n <- bind_rows(d_HG_n_L, d_HG_n_M, d_HG_n_N) |> 
   rename(N = n) |> 
   mutate(N = as.integer(N)) |> 
+  rename(TLHG = HG) |> 
   rename_TLHGs() |> 
-  group_by(HG) |> 
-  summarise(N = sum(N), .groups = "drop") |> 
-  rename(TLHG = HG)
+  group_by(TLHG) |> 
+  summarise(N = sum(N), .groups = "drop") 
 
 
 
@@ -79,12 +67,84 @@ d_tmp_d_helix <- d_helix_raw_quoted |>
   mutate(Position = gsub("chrM:", "", locus, fixed = TRUE) |> as.integer()) |> 
   rowwise() |> 
   mutate(A = list(jsonlite::parse_json(alleles))) |> 
-  mutate(LongestAllele = A[[which.max(sapply(A, nchar))]]) |> 
-  ungroup() |> 
-  mutate(LongestAlleleLength = nchar(LongestAllele))
+  ungroup() 
+
 
 ####################################################################
 
+d_tmp_d_helix_parsed <- d_tmp_d_helix |> 
+  rename(HGHom = haplogroups_for_homoplasmic_variants) |> 
+  rowwise() |> 
+  mutate(HGHom = list(jsonlite::parse_json(HGHom))) |> 
+  #mutate(HGHomtbl = list(as.data.frame(do.call(rbind, lapply(HGHom, unlist))) |> set_names(c("TLHG", "n")) |> as_tibble())) |>
+  mutate(HGHomtbl = list({
+    x <- as.data.frame(do.call(rbind, lapply(HGHom, unlist))) |> as_tibble()
+    
+    if (nrow(x) > 0L) {
+      colnames(x) <- c("TLHG", "n")
+      x <- x |> 
+        mutate(n = as.integer(n))
+    }
+    x
+    })) |>  
+  ungroup() |> 
+  select(-HGHom, -alleles, -locus) |> 
+  rename(HGHom = HGHomtbl) 
+
+d_tmp_d_helix_parsed
+d_tmp_d_helix_parsed |> slice(1:4) |> pull(HGHom)
+
+# Check that counts_hom is correct
+d_tmp_d_helix_parsed_n <- d_tmp_d_helix_parsed |> 
+  mutate(n = lapply(HGHom, \(x) {
+    if (is.null(x) || nrow(x) == 0L) {
+      return(0L)
+    }
+    return(x |> pull(n) |> sum())
+  }) |> unlist())
+d_tmp_d_helix_parsed_n
+d_tmp_d_helix_parsed_n |> filter(counts_hom != n)
+
+
+###
+d_tmp_d_helix_parsed |> 
+  rowwise() |> 
+  mutate(n_A = length(A)) |> 
+  ungroup() |> 
+  pull(n_A) |> 
+  table()
+
+d_tmp_d_helix_parsed |> 
+  filter(lengths(A) == 3) 
+
+
+#' remove all alleles with not 2 alleles (they all have counts_hom == 0)
+d_helix <- d_tmp_d_helix_parsed |> 
+  filter(lengths(A) == 2) |> 
+  rowwise() |> 
+  mutate(Ref = A[[1L]], Alt = A[[2L]]) |> 
+  ungroup() |> 
+  select(-A) |> 
+  select(Position, Ref, Alt, HGHom, HGHomN = counts_hom)
+d_helix
+
+################################################################################
+
+
+#' First, calculate base frequencies
+#' 
+#' We only take positions with one reference allele (or else we do not know
+#' the count of each reference allele)
+
+rmd_01_one_reference <- d_helix |> 
+  group_by(Position) |> 
+  mutate(n_ref = Ref |> unique() |> length()) |> 
+  ungroup() |> 
+  filter(n_ref > 1L) |> 
+  distinct(Position)
+
+
+# Only saves the first reason for removal
 exclude_positions <- function(d, d_pos, reason) {
   if (!("ExcludeReason" %in% colnames(d))) {
     d <- d |> 
@@ -96,232 +156,123 @@ exclude_positions <- function(d, d_pos, reason) {
     mutate(ExcludeReason = case_when(
       is.na(ExcludeReason) & is.na(ExcludeReasonTmp) ~ NA_character_,
       is.na(ExcludeReason) ~ ExcludeReasonTmp,
-      is.na(ExcludeReasonTmp) ~ ExcludeReason,
-      
-      !is.na(ExcludeReason) & !is.na(ExcludeReasonTmp) ~ paste0(ExcludeReason, ", ", ExcludeReasonTmp),
-      
+      TRUE ~ ExcludeReason)) |> 
+    select(-ExcludeReasonTmp)
+  
+  # d |> 
+  #   left_join(d_pos |> mutate(ExcludeReasonTmp = reason), by = "Position") |> 
+  #   mutate(ExcludeReason = case_when(
+  #     is.na(ExcludeReason) & is.na(ExcludeReasonTmp) ~ NA_character_,
+  #     is.na(ExcludeReason) ~ ExcludeReasonTmp,
+  #     is.na(ExcludeReasonTmp) ~ ExcludeReason,
+  #     
+  #     !is.na(ExcludeReason) & !is.na(ExcludeReasonTmp) ~ paste0(ExcludeReason, ", ", ExcludeReasonTmp),
+  #     
+  #     TRUE ~ ExcludeReason)) |> 
+  #   select(-ExcludeReasonTmp)
+}
+
+
+d_helix <- d_helix |> 
+  exclude_positions(rmd_01_one_reference, "More than one reference")
+
+d_helix |> distinct(Position) |> nrow()
+d_helix |> distinct(Position, ExcludeReason) |> count(ExcludeReason)
+
+d_helix_refined_ref_n <- d_helix |> 
+  filter(is.na(ExcludeReason)) |> 
+  unnest(HGHom) |> 
+  rename_TLHGs() |> 
+  group_by(Position, Ref, TLHG) |> 
+  summarise(n_Alt = sum(n), 
+            .groups = "drop") |> 
+  left_join(d_helix_TLHG_freq |> rename(N_TLHG = N), by = "TLHG") |> 
+  mutate(n_Ref = N_TLHG - n_Alt) |> 
+  select(Position, Ref, TLHG, N_TLHG, n_Ref)
+d_helix_refined_ref_n
+d_helix_refined_ref_n |> filter(is.na(N_TLHG))
+
+
+
+d_helix_refined_var_n <- d_helix |> 
+  filter(is.na(ExcludeReason)) |> 
+  unnest(HGHom) |> 
+  rename_TLHGs() |> 
+  group_by(Position, TLHG, Ref, Alt) |> 
+  summarise(n_Alt = sum(n), 
+            .groups = "drop")
+d_helix_refined_var_n
+
+
+d_helix_refined_long <- 
+  bind_rows(
+    d_helix_refined_ref_n |> select(Position, Ref, TLHG, n = n_Ref) |> mutate(Base = Ref) |> mutate(Type = "Ref"),
+    d_helix_refined_var_n |> select(Position, Ref, Base = Alt, TLHG, n = n_Alt) |> mutate(Type = "Alt")
+  ) |> 
+  arrange(Position, Ref, TLHG, Type, Base) |> 
+  left_join(d_helix_TLHG_freq |> rename(N_TLHG = N), by = "TLHG") 
+d_helix_refined_long
+
+
+
+n_pos_prob <- d_helix_refined_long |> 
+  group_by(Position, TLHG, Ref) |> 
+  summarise(n = sum(n),
+            N_TLHG = unique(N_TLHG),
+            .groups = "drop") |> 
+  filter(N_TLHG != n) |> 
+  nrow()
+stopifnot(n_pos_prob == 0L)
+
+################################################################################
+#' Other exclusions:
+
+exclude_positions_ref_base <- function(d, d_pos, reason) {
+  if (!("ExcludeReason" %in% colnames(d))) {
+    d <- d |> 
+      mutate(ExcludeReason = NA_character_)
+  }
+  
+  d |> 
+    left_join(d_pos |> mutate(ExcludeReasonTmp = reason), by = c("Position", "Ref", "Alt" = "Base")) |> 
+    mutate(ExcludeReason = case_when(
+      is.na(ExcludeReason) & is.na(ExcludeReasonTmp) ~ NA_character_,
+      is.na(ExcludeReason) ~ ExcludeReasonTmp,
       TRUE ~ ExcludeReason)) |> 
     select(-ExcludeReasonTmp)
 }
 
-####################################################################
+################################################################################
 
-# More alleles per position
-d_exclude_01_more_entries <- d_tmp_d_helix |> 
-  group_by(Position) |> 
-  summarise(n = n()) |> 
-  ungroup() |> 
-  filter(n > 1L) |> 
-  select(Position) |> 
-  arrange(Position)
+#' 1)
+#' Variant must be seen at least twice (not within TLHG)
+rmd_02_at_least_twice <- d_helix_refined_long |> 
+  group_by(Position, Ref, Base) |> 
+  summarise(n = sum(n), 
+            .groups = "drop") |> 
+  filter(n <= 1L)
 
-d_tmp_d_helix_step1 <- d_tmp_d_helix |> 
-  exclude_positions(d_exclude_01_more_entries, "Non-binary")
+d_helix_refined_long |> 
+  semi_join(rmd_02_at_least_twice, by = c("Position", "Ref", "Base"))
+d_helix_refined_long <- d_helix_refined_long |> 
+  anti_join(rmd_02_at_least_twice, by = c("Position", "Ref", "Base"))
 
-d_tmp_d_helix_step1 |> count(ExcludeReason)
-d_tmp_d_helix_step1 |> distinct(Position, ExcludeReason) |> count(ExcludeReason)
-d_tmp_d_helix_step1 |> filter(!is.na(ExcludeReason))
+d_helix2 <- d_helix |> 
+  exclude_positions_ref_base(rmd_02_at_least_twice |> select(-n), "Variant only seen once")
 
-####################################################################
+d_helix2 |> distinct(Position) |> nrow()
+d_helix2 |> distinct(Position, ExcludeReason) |> count(ExcludeReason)
+d_helix |> distinct(Position, ExcludeReason) |> count(ExcludeReason)
 
-# INDELs
-d_exclude_02a_longest_allele_position <- d_tmp_d_helix |> 
-  anti_join(d_exclude_01_more_entries, by = "Position") |> 
-  filter(LongestAlleleLength > 1) |> 
-  select(Position, LongestAlleleLength) |> 
-  arrange(Position)
-
-d_tmp_d_helix_step1 |> filter(between(Position, 80, 90))
-d_tmp_d_helix_step2 <- d_tmp_d_helix_step1 |> 
-  exclude_positions(d_exclude_02a_longest_allele_position |> select(Position), "INDEL")
-d_tmp_d_helix_step2 |> filter(between(Position, 80, 90))
-
-d_tmp_d_helix_step2 |> count(ExcludeReason)
-d_tmp_d_helix_step2 |> distinct(Position, ExcludeReason) |> count(ExcludeReason)
-d_tmp_d_helix_step2 |> filter(!is.na(ExcludeReason))
-
-
-
-####################################################################
-
-
-
-
-# INDELs' neigbours
-N_NEIGHBOR <- 2
-d_exclude_02b_longest_allele_position_neigbors <- d_exclude_02a_longest_allele_position |> 
-  mutate(StartPos = Position - N_NEIGHBOR + 1,
-         EndPos = Position + LongestAlleleLength + N_NEIGHBOR - 1) |> 
-  rowwise() |> 
-  mutate(Pos = list(StartPos:EndPos)) |> 
-  ungroup() |> 
-  select(Position = Pos) |> 
-  unnest(Position) |> 
-  distinct(Position) |> 
-  
-  # Only neighbours, not INDELs themselves
-  anti_join(d_exclude_02a_longest_allele_position |> select(Position), by = "Position")
-
-
-d_tmp_d_helix_step2 |> filter(between(Position, 80, 90))
-d_tmp_d_helix_step3 <- d_tmp_d_helix_step2 |> 
-  exclude_positions(d_exclude_02b_longest_allele_position_neigbors |> select(Position), "INDEL neighbour")
-d_tmp_d_helix_step3 |> filter(between(Position, 80, 90))
-
-d_tmp_d_helix_step3 |> count(ExcludeReason)
-d_tmp_d_helix_step3 |> distinct(Position, ExcludeReason) |> count(ExcludeReason)
-d_tmp_d_helix_step3 |> filter(!is.na(ExcludeReason))
-
-
-####################################################################
-
-# haplogroups_for_homoplasmic_variants empty
-d_exclude_03_no_homoplasmic_variants <- d_tmp_d_helix |> 
-  filter(haplogroups_for_homoplasmic_variants == "[]") |> 
-  distinct(Position) |> 
-  arrange(Position)
-
-
-d_tmp_d_helix_step3
-d_tmp_d_helix_step4 <- d_tmp_d_helix_step3 |> 
-  exclude_positions(d_exclude_03_no_homoplasmic_variants |> select(Position), "No homoplasmic variants")
-d_tmp_d_helix_step4
-
-d_tmp_d_helix_step4 |> count(ExcludeReason)
-d_tmp_d_helix_step4 |> distinct(Position, ExcludeReason) |> count(ExcludeReason)
-d_tmp_d_helix_step4 |> filter(!is.na(ExcludeReason))
-
-
-
-
-####################################################################
-
-# seen at least 2 times overall (not in each HG)
-d_exclude_05_seen_at_least_twice_tmp <- d_tmp_d_helix_step4 |> 
-  #slice(1:100) |> 
-  select(Position, 
-         A,
-         HGHom = haplogroups_for_homoplasmic_variants) |> 
-  rowwise() |> 
-  mutate(HGHom = list(jsonlite::parse_json(HGHom))) |> 
-  select(Position, A, HGHom) |> 
-  ungroup() |> 
-  rowwise() |> 
-  mutate(HGHomtbl = list(as.data.frame(do.call(rbind, lapply(HGHom, unlist))) |> as_tibble())) |>  
-  
-  ungroup() |> 
-  rowwise() |> 
-  # We know there are only two alleles
-  mutate(Ref = A[[1]],
-         Alt = A[[2]]) |> 
-  ungroup() |> 
-  select(Position, Ref, Alt, HGHomtbl) |> 
-  unnest(HGHomtbl) |> 
-  rename(HG = V1, 
-         n = V2)
-
-d_exclude_05_seen_at_least_twice_tmp2 <- d_exclude_05_seen_at_least_twice_tmp |> 
-  group_by(Position) |> 
-  summarise(n = sum(as.integer(n)), 
-            .groups = "drop") 
-d_exclude_05_seen_at_least_twice <- d_exclude_05_seen_at_least_twice_tmp2 |> filter(n < 2)
-
-
-d_tmp_d_helix_step4
-d_tmp_d_helix_step5 <- d_tmp_d_helix_step4 |> 
-  exclude_positions(d_exclude_05_seen_at_least_twice |> select(Position), "Not seen twice (2)")
-d_tmp_d_helix_step5
-
-d_tmp_d_helix_step5 |> count(ExcludeReason)
-d_tmp_d_helix_step5 |> distinct(Position, ExcludeReason) |> count(ExcludeReason)
-d_tmp_d_helix_step5 |> filter(!is.na(ExcludeReason))
-
-
-
-####################################################################
-####################################################################
-
-d_tmp_d_helix_step_final <- d_tmp_d_helix_step5
-
-####################################################################
-####################################################################
-
-d_helix_info <- d_tmp_d_helix_step_final |> 
-  select(-LongestAllele, -LongestAlleleLength)
-d_helix_info
-
-d_helix_info |> 
-  count(ExcludeReason)
-
-####################################################################
-
-d_helix_HG_long_raw <- d_tmp_d_helix_step_final |> 
-  filter(is.na(ExcludeReason)) |> 
-  #slice(1:100) |> 
-  select(Position, 
-         A,
-         HGHom = haplogroups_for_homoplasmic_variants) |> 
-  rowwise() |> 
-  mutate(HGHom = list(jsonlite::parse_json(HGHom))) |> 
-  select(Position, A, HGHom) |> 
-  ungroup() |> 
-  rowwise() |> 
-  mutate(HGHomtbl = list(as.data.frame(do.call(rbind, lapply(HGHom, unlist))) |> as_tibble())) |>  
-  
-  ungroup() |> 
-  rowwise() |> 
-  # We know there are only two alleles
-  mutate(Ref = A[[1]],
-         Alt = A[[2]]) |> 
-  ungroup() |> 
-  select(Position, Ref, Alt, HGHomtbl) |> 
-  unnest(HGHomtbl) |> 
-  rename(HG = V1, 
-         n = V2) |> 
-  
-  rename_TLHGs() |> 
-  
-  mutate(n = as.integer(n)) |> 
-  group_by(Position, Ref, Alt, HG) |> 
-  summarise(n = sum(n), .groups = "drop") |> 
-  rename(TLHG = HG) |> 
-  left_join(d_TLHG_n |> rename(N_HG = N), by = "TLHG") 
-
-
-
-d_helix_long <- d_helix_HG_long_raw |> 
-  mutate(n_Alt = as.integer(n),
-         n_Ref = N_HG - n_Alt) |> 
-  select(-n) |> 
-  mutate(p_Alt = n_Alt / N_HG,
-         p_Ref = n_Ref / N_HG) |> 
-  ungroup() 
-
-########################################
-
-stopifnot(d_helix_info |> filter(is.na(ExcludeReason)) |> nrow()
-          ==
-            d_helix_long |> distinct(Position) |> nrow()
-)
-
-########################################
+d_helix <- d_helix2
+################################################################################
 
 d_helix_TLHG_freq <- d_TLHG_n 
-
-d_helix_positioninfo <- d_helix_info |> 
-  select(Position, ExcludeReason)
-
-d_helix_SNV_freq_long <- d_helix_long |> 
-  select(Position, 
-         Ref, Alt, 
-         TLHG, 
-         n_Ref, n_Alt)
-  
-########################################
-
-
 usethis::use_data(d_helix_TLHG_freq, overwrite = TRUE)
-usethis::use_data(d_helix_positioninfo, overwrite = TRUE)
-usethis::use_data(d_helix_SNV_freq_long, overwrite = TRUE)
+
+#usethis::use_data(d_helix, overwrite = TRUE)
+
+usethis::use_data(d_helix, overwrite = TRUE)
+usethis::use_data(d_helix_refined_long, overwrite = TRUE)
 
 

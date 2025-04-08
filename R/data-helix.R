@@ -12,38 +12,42 @@
 #' <https://www.biorxiv.org/content/10.1101/798264v3> / <https://doi.org/10.1101/798264>)
 "d_helix_TLHG_freq"
 
-#' HelixMTdb position information
+
+#' HelixMTdb raw data
 #' 
-#' Information for each position if excluded (why) or not.
+#' Only information about homoplasmic variants.
 #'
-#' @format ## `d_helix_positioninfo`
-#' A tibble with 14,324 rows and 2 columns:
+#' @format ## `d_helix`
+#' A tibble with 30 rows and 2 columns:
 #' \describe{
 #'   \item{Position}{mtDNA position.}
-#'   \item{ExcludeReason}{Reason for excluded Position, `NA` if not excluded (i.e. included).}
+#'   \item{Ref}{Reference base.}
+#'   \item{Alt}{Variant base.}
+#'   \item{HGHom}{Variant counts in different TLHGs.}
+#'   \item{HGHomN}{Total from `HGHom`.}
+#'   \item{ExcludeReason}{Exclusion reason, `NA` if included in `d_helix_refined_long`.}
 #' }
 #' @source "A catalog of homoplasmic and heteroplasmic mitochondrial DNA variants in humans" (
 #' <https://www.biorxiv.org/content/10.1101/798264v3> / <https://doi.org/10.1101/798264>)
-"d_helix_positioninfo"
-
+"d_helix"
 
 #' HelixMTdb single nucleotide variation frequency information
 #' 
 #' Information for each single nucleotide variation (SNV) position on 
 #' frequencies in each top-level haplogroup (TLHG) for the included positions 
-#' (only binary SNVs included). 
+#' (cf. `d_helix`). Note, only homoplasmic variants included.
 #'
-#' @format ## `d_helix_SNV_freq_long`
+#' @format ## `d_helix_refined_long`
 #' A tibble with 28,751 rows and 6 columns:
 #' \describe{
 #'   \item{Position}{mtDNA position.}
 #'   \item{Ref}{Revised Cambridge Reference Sequence (rCRS) base.}
-#'   \item{Alt}{Alternative base.}
-#'   \item{TLHG}{Top-level haplogroup}
-#'   \item{n_Ref}{Number of individuals in the top-level haplogroup with the reference rCRS allele.}
-#'   \item{n_Alt}{Number of individuals in the top-level haplogroup with the alternative allele.}
+#'   \item{TLHG}{Top-level haplogroup.}
+#'   \item{n}{Number of individuals in the TLHG with the `Base`.}
+#'   \item{Base}{The `Base` that `n` is a frequency of.}
+#'   \item{Type}{The `Base` type (either reference or variant).}
+#'   \item{N_TLHG}{Number of individuals in the TLHG, cf. `d_helix_TLHG_freq`.}
 #' }
 #' @source "A catalog of homoplasmic and heteroplasmic mitochondrial DNA variants in humans" (
 #' <https://www.biorxiv.org/content/10.1101/798264v3> / <https://doi.org/10.1101/798264>)
-"d_helix_SNV_freq_long"
-
+"d_helix_refined_long"
