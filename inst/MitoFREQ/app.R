@@ -114,18 +114,36 @@ ui <- fluidPage(
           h4("LR"),
           textOutput("lr"),
           
-          h4("Important notes"),
+          h4("Data source"),
           tags$ul(
-            #tags$li("Assumes that entire mitogenome (1-16,569) is typed (especially the SNV chosen)."),
-            tags$li("SNVs with more than one reference were excluded (R: `mitofreq::d_helix |> count(ExcludeReason)`)."),
-            tags$li("SNVs must have been seen at least twice (globally, not within TLHG), try e.g. Example 8 (and in R: `mitofreq::d_helix_refined_long |> filter(n == 1L)`)."),
-            tags$li("TLHG frequency is based on distribution from Helix unless a custom is provided."),
-            #tags$li(paste0(fmt(helix_pos_excluded_n), " of the HelixMTdb excluded (refer to the dataset d_helix_positioninfo in the R package mitofreq)")),
-            #tags$li(paste0(fmt(helix_pos_included_n), " of the HelixMTdb included (refer to the dataset d_helix_positioninfo in the R package mitofreq)")),
-            tags$li("HelixMTdb data source (data available via the R package ", 
+            tags$li("HelixMTdb data source: ", 
+                    tags$a("Bolze et al. (2020). \"A catalog of homoplasmic and heteroplasmic mitochondrial DNA variants in humans\"", href = "https://www.biorxiv.org/content/10.1101/798264v3")),
+            tags$li("HelixMTdb datasets made available via the R package \"", 
                     tags$a("mitofreq", href = "https://github.com/mikldk/mitofreq"), 
-                    ": ", 
-                    tags$a("\"A catalog of homoplasmic and heteroplasmic mitochondrial DNA variants in humans\"", href = "https://www.biorxiv.org/content/10.1101/798264v3"))
+                    "\":"),
+            tags$ul(
+              tags$li("TLHG distribution: ", tags$code("d_helix_TLHG_freq"), " (write ", tags$code("?d_helix_TLHG_freq"), " for documentation)"),
+              tags$li("Raw data on homoplasmic variants: ", tags$code("d_helix"), " (write ", tags$code("?d_helix"), " for documentation)"),
+              tags$li("SNV frequencies (after exclusion cf. below): ", tags$code("d_helix_refined_long"), " (write ", tags$code("?d_helix_refined_long"), " for documentation)")
+            )
+          ),
+          
+          h4("TLHG frequencies"),
+          tags$ul(
+            tags$li("TLHG frequency is based on distribution from Helix unless a custom is provided.")
+          ),
+          
+          h4("SNV exclusion criteria notes"),
+          tags$ul(
+            tags$li("SNVs with more than one reference were excluded."),
+            tags$ul(
+              tags$li("Exclusions can be summarised by ", tags$code("d_helix |> count(ExcludeReason)"), ".")
+            ),
+            tags$li("SNVs must have been seen at least twice (globally, not within TLHG)."),
+            tags$ul(
+              tags$li("Try e.g. Example 8 where the TLHG frequency is only 1."),
+              tags$li("More details can be found in R: ", tags$code("d_helix_refined_long |> filter(n == 1L)"), ".")
+            )
           )
         ),
 
@@ -501,13 +519,20 @@ server <- function(input, output, session) {
   
   output$lr_snv <- renderText({
     d_SNV <- req(rare_SNV())
-    isolate(paste("Position ", d_SNV |> pull(Position) |> fmt()))
+    #print(d_SNV)
+    #isolate(paste("Position ", d_SNV |> pull(Position) |> fmt()))
+    #isolate(paste0("Variant ", d_SNV |> mutate(Var = paste0(Position, Profile)) |> pull(Var)))
+    isolate(d_SNV |> mutate(Var = paste0(Position, Profile)) |> pull(Var))
   })
   
   output$lr_snv_freq <- renderText({
     lr_res <- req(lr_ingridients())
+    d_SNV <- req(rare_SNV())
+    tlhg <- req(reac_selected_tlhg())
+    var <- d_SNV |> mutate(Var = paste0(Position, Profile)) |> pull(Var)
     
-    isolate(paste0("SNV was observed ", fmt(lr_res$snv_num), " out of a total of ", fmt(lr_res$snv_den), "."))
+    isolate(paste0(var, " was observed ", fmt(lr_res$snv_num), " out of a total of ", fmt(lr_res$snv_den), " in TLHG ", tlhg, "."))
+    #isolate(paste0("SNV was observed ", fmt(lr_res$snv_num), " out of a total of ", fmt(lr_res$snv_den), "."))
   })
   
   output$lr_popfreq <- renderText({

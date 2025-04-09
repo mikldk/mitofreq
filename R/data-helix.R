@@ -8,7 +8,7 @@
 #'   \item{TLHG}{Top-level haplogroup.}
 #'   \item{N}{Number of individuals in the top-level haplogroup.}
 #' }
-#' @source "A catalog of homoplasmic and heteroplasmic mitochondrial DNA variants in humans" (
+#' @source Bolze et al. (2020). "A catalog of homoplasmic and heteroplasmic mitochondrial DNA variants in humans" (
 #' <https://www.biorxiv.org/content/10.1101/798264v3> / <https://doi.org/10.1101/798264>)
 "d_helix_TLHG_freq"
 
@@ -27,7 +27,7 @@
 #'   \item{HGHomN}{Total from `HGHom`.}
 #'   \item{ExcludeReason}{Exclusion reason, `NA` if included in `d_helix_refined_long`.}
 #' }
-#' @source "A catalog of homoplasmic and heteroplasmic mitochondrial DNA variants in humans" (
+#' @source Bolze et al. (2020). "A catalog of homoplasmic and heteroplasmic mitochondrial DNA variants in humans" (
 #' <https://www.biorxiv.org/content/10.1101/798264v3> / <https://doi.org/10.1101/798264>)
 "d_helix"
 
@@ -48,6 +48,6 @@
 #'   \item{Type}{The `Base` type (either reference or variant).}
 #'   \item{N_TLHG}{Number of individuals in the TLHG, cf. `d_helix_TLHG_freq`.}
 #' }
-#' @source "A catalog of homoplasmic and heteroplasmic mitochondrial DNA variants in humans" (
+#' @source Bolze et al. (2020). "A catalog of homoplasmic and heteroplasmic mitochondrial DNA variants in humans" (
 #' <https://www.biorxiv.org/content/10.1101/798264v3> / <https://doi.org/10.1101/798264>)
 "d_helix_refined_long"
