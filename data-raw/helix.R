@@ -8,8 +8,6 @@ library(jsonlite)
 
 ################################################################################
 
-################################################################################
-
 helix_db_file <- tempfile()
 download.file(url = "https://s3.amazonaws.com/helix-research-public/mito/HelixMTdb_20200327.tsv", 
                           destfile = helix_db_file)
@@ -144,37 +142,8 @@ rmd_01_one_reference <- d_helix |>
   distinct(Position)
 
 
-# Only saves the first reason for removal
-exclude_positions <- function(d, d_pos, reason) {
-  if (!("ExcludeReason" %in% colnames(d))) {
-    d <- d |> 
-      mutate(ExcludeReason = NA_character_)
-  }
-  
-  d |> 
-    left_join(d_pos |> mutate(ExcludeReasonTmp = reason), by = "Position") |> 
-    mutate(ExcludeReason = case_when(
-      is.na(ExcludeReason) & is.na(ExcludeReasonTmp) ~ NA_character_,
-      is.na(ExcludeReason) ~ ExcludeReasonTmp,
-      TRUE ~ ExcludeReason)) |> 
-    select(-ExcludeReasonTmp)
-  
-  # d |> 
-  #   left_join(d_pos |> mutate(ExcludeReasonTmp = reason), by = "Position") |> 
-  #   mutate(ExcludeReason = case_when(
-  #     is.na(ExcludeReason) & is.na(ExcludeReasonTmp) ~ NA_character_,
-  #     is.na(ExcludeReason) ~ ExcludeReasonTmp,
-  #     is.na(ExcludeReasonTmp) ~ ExcludeReason,
-  #     
-  #     !is.na(ExcludeReason) & !is.na(ExcludeReasonTmp) ~ paste0(ExcludeReason, ", ", ExcludeReasonTmp),
-  #     
-  #     TRUE ~ ExcludeReason)) |> 
-  #   select(-ExcludeReasonTmp)
-}
-
-
 d_helix <- d_helix |> 
-  exclude_positions(rmd_01_one_reference, "More than one reference")
+  mitofreq:::exclude_positions(rmd_01_one_reference, "More than one reference")
 
 d_helix |> distinct(Position) |> nrow()
 d_helix |> distinct(Position, ExcludeReason) |> count(ExcludeReason)
@@ -213,6 +182,7 @@ d_helix_refined_long <-
   left_join(d_helix_TLHG_freq |> rename(N_TLHG = N), by = "TLHG") 
 d_helix_refined_long
 
+d_helix_refined_long |> filter(Position == 9680)
 
 
 n_pos_prob <- d_helix_refined_long |> 
@@ -220,45 +190,47 @@ n_pos_prob <- d_helix_refined_long |>
   summarise(n = sum(n),
             N_TLHG = unique(N_TLHG),
             .groups = "drop") |> 
-  filter(N_TLHG != n) |> 
-  nrow()
-stopifnot(n_pos_prob == 0L)
+  filter(N_TLHG != n) 
+n_pos_prob
+stopifnot(n_pos_prob |> nrow() == 0L)
+
+n_pos_prob <- d_helix_refined_long |>
+  mutate(p = n / N_TLHG) |> 
+  group_by(Position, TLHG) |> 
+  summarise(p = sum(p),
+            .groups = "drop") |> 
+  filter(abs(p - 1) > 1e-4) |> 
+  arrange(desc(abs(p - 1)))
+n_pos_prob
+stopifnot(n_pos_prob |> nrow() == 0L)
 
 ################################################################################
 #' Other exclusions:
 
-exclude_positions_ref_base <- function(d, d_pos, reason) {
-  if (!("ExcludeReason" %in% colnames(d))) {
-    d <- d |> 
-      mutate(ExcludeReason = NA_character_)
-  }
-  
-  d |> 
-    left_join(d_pos |> mutate(ExcludeReasonTmp = reason), by = c("Position", "Ref", "Alt" = "Base")) |> 
-    mutate(ExcludeReason = case_when(
-      is.na(ExcludeReason) & is.na(ExcludeReasonTmp) ~ NA_character_,
-      is.na(ExcludeReason) ~ ExcludeReasonTmp,
-      TRUE ~ ExcludeReason)) |> 
-    select(-ExcludeReasonTmp)
-}
 
 ################################################################################
 
 #' 1)
 #' Variant must be seen at least twice (not within TLHG)
 rmd_02_at_least_twice <- d_helix_refined_long |> 
+  filter(Type == "Alt") |> 
   group_by(Position, Ref, Base) |> 
   summarise(n = sum(n), 
             .groups = "drop") |> 
-  filter(n <= 1L)
+  filter(n <= 1L) 
+rmd_02_at_least_twice |> filter(Position == 9680)
+# All variants at position
+rmd_02_at_least_twice <- rmd_02_at_least_twice |> distinct(Position)
+
 
 d_helix_refined_long |> 
-  semi_join(rmd_02_at_least_twice, by = c("Position", "Ref", "Base"))
+  semi_join(rmd_02_at_least_twice, by = c("Position"))
 d_helix_refined_long <- d_helix_refined_long |> 
-  anti_join(rmd_02_at_least_twice, by = c("Position", "Ref", "Base"))
+  anti_join(rmd_02_at_least_twice, by = c("Position"))
 
 d_helix2 <- d_helix |> 
-  exclude_positions_ref_base(rmd_02_at_least_twice |> select(-n), "Variant only seen once")
+  mitofreq:::exclude_positions(rmd_02_at_least_twice, "Variant only seen once")
+  #mitofreq:::exclude_positions_ref_base(rmd_02_at_least_twice |> select(-n), "Variant only seen once")
 
 d_helix2 |> distinct(Position) |> nrow()
 d_helix2 |> distinct(Position, ExcludeReason) |> count(ExcludeReason)

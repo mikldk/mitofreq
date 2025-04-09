@@ -15,7 +15,7 @@ A tibble with 30 rows and 2 columns:
 }
 }
 \source{
-"A catalog of homoplasmic and heteroplasmic mitochondrial DNA variants in humans" (
+Bolze et al. (2020). "A catalog of homoplasmic and heteroplasmic mitochondrial DNA variants in humans" (
 \url{https://www.biorxiv.org/content/10.1101/798264v3} / \url{https://doi.org/10.1101/798264})
 }
 \usage{
