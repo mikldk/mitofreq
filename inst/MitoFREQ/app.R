@@ -85,7 +85,7 @@ ui <- navbarPage("MitoFREQ",
                                         download = NA, 
                                         target = "_blank"),
                                  
-                                 actionButton('reset_custom_TLHG_freq', 'Reset TLHG distribution to Helix'),
+                                 actionButton('reset_custom_TLHG_freq', 'Reset TLHG distribution'),
                                  
                                  
   
