@@ -66,16 +66,23 @@ parse_range <- function(range_str) {
 
 
 
-#' Extend profile to all Helix positions
+#' Extend profile to all positions with frequency information
+#' 
+#' Typically, either Helix (`d_helix_refined_long`) or 
+#' gnomAD (`d_gnomAD_refined_long`).
 #' 
 #' @param variants Vector of variants
 #' @param tlhg Top-level haplogroup
 #' @param range Positions range (default = 1:16569)
+#' @param d_SNV_long Typically, `d_helix_refined_long` or `d_gnomAD_refined_long`
 #' 
 #' @importFrom dplyr select filter pull anti_join semi_join left_join summarise group_by mutate
 #' @importFrom tibble tibble
 #' @export
-extend_profile_to_helix_positions <- function(variants, tlhg, range = 1:16569) {
+extend_profile <- function(variants, 
+                           tlhg, 
+                           range = 1:16569, 
+                           d_SNV_long = d_helix_refined_long) {
   # variants <- c("21AT", "263G", "9150G")
   # tlhg <- "H"
   
@@ -94,38 +101,31 @@ extend_profile_to_helix_positions <- function(variants, tlhg, range = 1:16569) {
                               Base = base, 
                               Variant = variants)
   
-  d_tmp_helix_HG <- mitofreq::d_helix_refined_long |> 
+  d_tmp_SNP_HG <- d_SNV_long |> 
     dplyr::filter(TLHG == tlhg) 
   
   # Not found
-  if (nrow(d_tmp_helix_HG) <= 0L) {
+  if (nrow(d_tmp_SNP_HG) <= 0L) {
     return(NULL)
   }
-  
-  d_TLHG_info <- mitofreq::d_helix_TLHG_freq |> 
-    dplyr::filter(TLHG == tlhg) 
-  if (nrow(d_TLHG_info) != 1L) {
-    return(NULL)
-  }
-  TLHG_N <- d_TLHG_info |> dplyr::pull(N)
-  
+
   # Remove positions not in range:
   d_tmp_range <- tibble(Position = range)
   d_variants_ignored_range <- d_profile |> 
     dplyr::anti_join(d_tmp_range, by = "Position")
   
-  # Remove positions not in Helix:
-  d_variants_ignored_helix <- d_profile |> 
-    dplyr::anti_join(d_tmp_helix_HG, by = "Position")
+  # Remove positions not in d_SNV:
+  d_variants_ignored <- d_profile |> 
+    dplyr::anti_join(d_tmp_SNP_HG, by = "Position")
 
-  d_only_helix <- d_profile |>
+  d_only_SNV <- d_profile |>
     dplyr::semi_join(d_tmp_range, by = "Position") |> 
-    dplyr::semi_join(d_tmp_helix_HG, by = "Position")
+    dplyr::semi_join(d_tmp_SNP_HG, by = "Position")
   
-  # Extend by ALL Helix positions:
-  d_all_helix_SNV_prob <- d_tmp_helix_HG |> 
+  # Extend by ALL positions:
+  d_all_SNV_prob <- d_tmp_SNP_HG |> 
     dplyr::semi_join(d_tmp_range, by = "Position") |> 
-    dplyr::left_join(d_only_helix |> dplyr::select(Position, Base, Variant), by = c("Position", "Base")) |> 
+    dplyr::left_join(d_only_SNV |> dplyr::select(Position, Base, Variant), by = c("Position", "Base")) |> 
     dplyr::select(-TLHG) |> 
     dplyr::group_by(Position) |> 
     dplyr::summarise(
@@ -145,11 +145,11 @@ extend_profile_to_helix_positions <- function(variants, tlhg, range = 1:16569) {
     dplyr::select(Position, Ref, Profile = Base, BaseType = Type, 
                   N_TLHG, n_Base = n, p_Base)
   
-  #d_all_helix_SNV_prob
+  #d_all_SNV_prob
   
   return(list(
-    d_profile_ext = d_all_helix_SNV_prob,
+    d_profile_ext = d_all_SNV_prob,
     d_variants_ignored_range = d_variants_ignored_range,
-    d_variants_ignored_helix = d_variants_ignored_helix
+    d_variants_ignored = d_variants_ignored
   ))
 }

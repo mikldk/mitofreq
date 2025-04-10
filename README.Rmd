@@ -13,17 +13,34 @@ library(mitofreq)
 ```
 
 
+
+## TLHG distribution
+
 ```{r}
 head(d_helix_TLHG_freq)
+head(d_gnomAD_TLHG_freq)
+```
+
+
+## Exclusion
+
+```{r}
+head(d_helix)
+xtabs(~ ExcludeReason, d_helix, addNA = TRUE)
 ```
 
 ```{r}
-head(d_helix_positioninfo)
-xtabs(~ ExcludeReason, d_helix_positioninfo)
+head(d_gnomAD)
+xtabs(~ ExcludeReason, d_gnomAD, addNA = TRUE)
 ```
 
+
+## SNV frequency information
 
 ```{r}
-head(d_helix_SNV_freq_long)
+head(d_helix_refined_long)
 ```
 
+```{r}
+head(d_gnomAD_refined_long)
+```

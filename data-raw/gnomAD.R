@@ -273,7 +273,7 @@ d_gnomAD_TLHG_freq <- d_gnomAD |>
   unnest(c(TLHG, N_TLHG)) |> 
   rename_TLHGs() |> 
   group_by(TLHG) |> 
-  summarise(N_TLHG = mean(N_TLHG), 
+  summarise(N = mean(N_TLHG), 
             .groups = "drop")
 d_gnomAD_TLHG_freq |> print(n = Inf)
 d_gnomAD_TLHG_freq
