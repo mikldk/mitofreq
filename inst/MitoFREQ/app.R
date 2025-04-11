@@ -71,6 +71,7 @@ ui <- navbarPage("MitoFREQ",
                                  
                                  selectInput(inputId = "selected_tlhg", 
                                              label = "Select TLHG", 
+                                             selected = "H",
                                              choices = TLHG_choices),
                                  
                                  # fileInput(inputId = "custom_TLHG_freq2", 
@@ -78,6 +79,8 @@ ui <- navbarPage("MitoFREQ",
                                  #           accept = ".xlsx"),
                                  
                                  uiOutput(outputId = "custom_TLHG_freq_output"),
+                                 
+                                 p("If none chosen, HelixMTdb's TLHG distribution is used."),
                                  
                                  tags$a(href = "TLHG_freq.xlsx", 
                                         class = "btn btn-primary", 
@@ -110,7 +113,7 @@ ui <- navbarPage("MitoFREQ",
                                    
                                    h2("LR"),
                                    
-                                   h4("TLHG frequency"),
+                                   h4("TLHG frequency (HelixMTdb/custom)"),
                                    textOutput("helix_lr_tlhg_freq"),
                                    h4("Rare SNV position chosen"),
                                    textOutput("helix_lr_snv"),
@@ -128,7 +131,7 @@ ui <- navbarPage("MitoFREQ",
                                    
                                    h2("LR"),
                                    
-                                   h4("TLHG frequency"),
+                                   h4("TLHG frequency (HelixMTdb/custom)"),
                                    textOutput("gnomAD_lr_tlhg_freq"),
                                    h4("Rare SNV position chosen"),
                                    textOutput("gnomAD_lr_snv"),
@@ -246,7 +249,6 @@ ui <- navbarPage("MitoFREQ",
                                            tags$a("mitofreq", href = "https://github.com/mikldk/mitofreq"), 
                                            "\":"),
                                    tags$ul(
-                                     tags$li("TLHG distribution: ", tags$code("d_gnomAD_TLHG_freq"), " (write ", tags$code("?d_gnomAD_TLHG_freq"), " for documentation)"),
                                      tags$li("Raw data on homoplasmic variants: ", tags$code("d_gnomAD"), " (write ", tags$code("?d_gnomAD"), " for documentation)"),
                                      tags$li("SNV frequencies (after exclusion cf. below): ", tags$code("d_gnomAD_refined_long"), " (write ", tags$code("?d_gnomAD_refined_long"), " for documentation)")
                                    )
@@ -266,12 +268,14 @@ ui <- navbarPage("MitoFREQ",
                                  tags$ul(
                                    tags$li("SNVs with more than one reference were excluded."),
                                    tags$ul(
-                                     tags$li("Exclusions can be summarised by ", tags$code("d_helix |> count(ExcludeReason)"), ".")
+                                     tags$li("Exclusions can be summarised by ", tags$code("d_helix |> count(ExcludeReason)"), "."),
+                                     tags$li("Exclusions can be summarised by ", tags$code("d_gnomAD |> count(ExcludeReason)"), ".")
                                    ),
                                    tags$li("SNVs must have been seen at least twice (globally, not within TLHG)."),
                                    tags$ul(
                                      tags$li("Try e.g. Example 8 where the TLHG frequency is only 1."),
-                                     tags$li("More details can be found in R: ", tags$code("d_helix_refined_long |> filter(n == 1L)"), ".")
+                                     tags$li("More details can be found in R: ", tags$code("d_helix_refined_long |> filter(n == 1L)"), "."),
+                                     tags$li("More details can be found in R: ", tags$code("d_gnomAD_refined_long |> filter(n == 1L)"), ".")
                                    )
                                  )
                                  
@@ -315,7 +319,11 @@ server <- function(input, output, session) {
   
   
   reac_selected_variants <- reactive({
-    req(input$selected_variants)
+    if (is.null(input$selected_variants) || input$selected_variants == "rCRS") {
+      return(c())
+    }
+    
+    #req(input$selected_variants)
 
     vars <- input$selected_variants
     
@@ -402,16 +410,21 @@ server <- function(input, output, session) {
     req(reset_trigger())
     
     fileInput(inputId = "custom_TLHG_freq", 
-              label = "Custom TLHG distribution", 
+              label = "Custom TLHG distribution (override HelixMTdb's)", 
               accept = ".xlsx")
   })
   
   
   output$profile_selected <- renderTable({
     req(reac_selected_tlhg())
-    req(reac_selected_variants())
+    #req(reac_selected_variants())
     
     vars <- reac_selected_variants()
+    
+    if (length(vars) == 0L) {
+      vars <- "(rCRS)"
+    }
+    
     tlhg <- req(reac_selected_tlhg())
     
     data.frame(
@@ -468,7 +481,7 @@ server <- function(input, output, session) {
   })
   
   helix_reac_extended_result <- reactive({
-    req(reac_selected_variants())
+    #req(reac_selected_variants())
     req(reac_selected_tlhg())
     req(reac_selected_range())
     
@@ -487,7 +500,7 @@ server <- function(input, output, session) {
   })
   
   helix_reac_extended_profile <- reactive({
-    req(reac_selected_variants())
+    #req(reac_selected_variants())
     req(reac_selected_tlhg())
     
     ext_res <- helix_reac_extended_result()
@@ -497,7 +510,7 @@ server <- function(input, output, session) {
   })
   
   helix_rare_SNV <- reactive({
-    req(reac_selected_variants())
+    #req(reac_selected_variants())
     req(reac_selected_tlhg())
     
     ext_res <- helix_reac_extended_result()
@@ -549,13 +562,17 @@ server <- function(input, output, session) {
     unaccounted <- setdiff(mitofreq::positions_from_variants(vars), 
                            mitofreq::positions_from_variants(c(var_ignored_range, var_ignored_helix, var_used)))
     
+    if (length(unaccounted) != 0L) {
+      stop("Expected 0 unaccounted for positions")
+    }
+    
     x <- tribble(
       ~Type, ~Count, ~Positions,
       "Variants given", length(vars), vars |> paste0(collapse = ", "),
       "Positions ignored (range)", length(var_ignored_range), var_ignored_range |> paste0(collapse = ", "),
       "Positions ignored (no Helix info)", length(var_ignored_helix), var_ignored_helix |> paste0(collapse = ", "),
-      "Positions used", length(var_used), var_used |> paste0(collapse = ", "),
-      "Positions unaccounted for", length(unaccounted), unaccounted |> paste0(collapse = ", ")
+      "Positions used", length(var_used), var_used |> paste0(collapse = ", ")
+      #, "Positions unaccounted for (sanity check)", length(unaccounted), unaccounted |> paste0(collapse = ", ")
     )
     
     return(x)
@@ -641,50 +658,52 @@ server <- function(input, output, session) {
   ##############################################################################
   
   gnomAD_reac_get_selected_tlhg_dist <- reactive({
-    if (is.null(values$upload_state)) {
-      return(d_gnomAD_TLHG_freq)
-    } else if (values$upload_state == 'reset') {
-      return(d_gnomAD_TLHG_freq)
-    } 
+    return(helix_reac_get_selected_tlhg_dist())
     
-    # else if (values$upload_state == 'uploaded') 
-    
-    d <- tryCatch({
-      readxl::read_excel(input$custom_TLHG_freq$datapath) |> as_tibble()
-    }, warning = function(w) {
-      d_gnomAD_TLHG_freq
-    }, error = function(e) {
-      d_gnomAD_TLHG_freq
-    })
-    
-    if (!isTRUE(all.equal(colnames(d), c("TLHG", "N")))) {
-      sendSweetAlert(
-        session = session,
-        title = "Error...",
-        text = "Column names must be TLHG and N.",
-        type = "error"
-      )
-      return(d_gnomAD_TLHG_freq)
-    } 
-    
-    if (!isTRUE(all.equal(d$TLHG, c("A", "C", "D", "E", "F", "G", "H", "HV", "I", "J", "K", "L0", 
-                                    "L1", "L2", "L3", "L4-6", "M", "N", "O", "P", "Q", "R/B", "S", 
-                                    "T", "U", "V", "W", "X", "Y", "Z")))) {
-      sendSweetAlert(
-        session = session,
-        title = "Error...",
-        text = "TLHGs (A, C, D, ...) must follow template.",
-        type = "error"
-      )
-      
-      return(d_gnomAD_TLHG_freq)
-    } 
-    
-    return(d)
+    # if (is.null(values$upload_state)) {
+    #   return(d_gnomAD_TLHG_freq)
+    # } else if (values$upload_state == 'reset') {
+    #   return(d_gnomAD_TLHG_freq)
+    # } 
+    # 
+    # # else if (values$upload_state == 'uploaded') 
+    # 
+    # d <- tryCatch({
+    #   readxl::read_excel(input$custom_TLHG_freq$datapath) |> as_tibble()
+    # }, warning = function(w) {
+    #   d_gnomAD_TLHG_freq
+    # }, error = function(e) {
+    #   d_gnomAD_TLHG_freq
+    # })
+    # 
+    # if (!isTRUE(all.equal(colnames(d), c("TLHG", "N")))) {
+    #   sendSweetAlert(
+    #     session = session,
+    #     title = "Error...",
+    #     text = "Column names must be TLHG and N.",
+    #     type = "error"
+    #   )
+    #   return(d_gnomAD_TLHG_freq)
+    # } 
+    # 
+    # if (!isTRUE(all.equal(d$TLHG, c("A", "C", "D", "E", "F", "G", "H", "HV", "I", "J", "K", "L0", 
+    #                                 "L1", "L2", "L3", "L4-6", "M", "N", "O", "P", "Q", "R/B", "S", 
+    #                                 "T", "U", "V", "W", "X", "Y", "Z")))) {
+    #   sendSweetAlert(
+    #     session = session,
+    #     title = "Error...",
+    #     text = "TLHGs (A, C, D, ...) must follow template.",
+    #     type = "error"
+    #   )
+    #   
+    #   return(d_gnomAD_TLHG_freq)
+    # } 
+    # 
+    # return(d)
   })
   
   gnomAD_reac_extended_result <- reactive({
-    req(reac_selected_variants())
+    #req(reac_selected_variants())
     req(reac_selected_tlhg())
     req(reac_selected_range())
     
@@ -703,7 +722,7 @@ server <- function(input, output, session) {
   })
   
   gnomAD_reac_extended_profile <- reactive({
-    req(reac_selected_variants())
+    #req(reac_selected_variants())
     req(reac_selected_tlhg())
     
     ext_res <- gnomAD_reac_extended_result()
@@ -713,7 +732,7 @@ server <- function(input, output, session) {
   })
   
   gnomAD_rare_SNV <- reactive({
-    req(reac_selected_variants())
+    #req(reac_selected_variants())
     req(reac_selected_tlhg())
     
     ext_res <- gnomAD_reac_extended_result()
@@ -765,13 +784,17 @@ server <- function(input, output, session) {
     unaccounted <- setdiff(mitofreq::positions_from_variants(vars), 
                            mitofreq::positions_from_variants(c(var_ignored_range, var_ignored_gnomAD, var_used)))
     
+    if (length(unaccounted) != 0L) {
+      stop("Expected 0 unaccounted for positions")
+    }
+    
     x <- tribble(
       ~Type, ~Count, ~Positions,
       "Variants given", length(vars), vars |> paste0(collapse = ", "),
       "Positions ignored (range)", length(var_ignored_range), var_ignored_range |> paste0(collapse = ", "),
       "Positions ignored (no gnomAD info)", length(var_ignored_gnomAD), var_ignored_gnomAD |> paste0(collapse = ", "),
-      "Positions used", length(var_used), var_used |> paste0(collapse = ", "),
-      "Positions unaccounted for", length(unaccounted), unaccounted |> paste0(collapse = ", ")
+      "Positions used", length(var_used), var_used |> paste0(collapse = ", ")#,
+      #"Positions unaccounted for (sanity check)", length(unaccounted), unaccounted |> paste0(collapse = ", ")
     )
     
     return(x)
