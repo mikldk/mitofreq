@@ -72,11 +72,7 @@ ui <- navbarPage("MitoFREQ",
                                              label = "Select TLHG", 
                                              selected = "H",
                                              choices = TLHG_choices),
-                                 
-                                 # fileInput(inputId = "custom_TLHG_freq2", 
-                                 #           label = "Custom TLHG distribution", 
-                                 #           accept = ".xlsx"),
-                                 
+
                                  uiOutput(outputId = "custom_TLHG_freq_output"),
                                  
                                  p("If none chosen, HelixMTdb's TLHG distribution is used."),
@@ -90,7 +86,9 @@ ui <- navbarPage("MitoFREQ",
                                  actionButton('reset_custom_TLHG_freq', 'Reset TLHG distribution'),
                                  
                                  
-  
+                                 h3("CLC Genomics file import"),
+                                 uiOutput(outputId = "custom_CLC_input"),
+                                 actionButton('reset_custom_CLC_input', 'Reset CLC import')
                           )
                           
                  ),
@@ -409,13 +407,14 @@ server <- function(input, output, session) {
   
   
   values <- reactiveValues(
-    upload_state = NULL
+    upload_state = NULL,
+    upload_CLC_file = NULL
   )
   
   
-  reset_trigger <- reactiveVal(0)
+  reset_TLHG_trigger <- reactiveVal(0)
   observe({
-    reset_trigger(isolate(reset_trigger()) + 1)
+    reset_TLHG_trigger(isolate(reset_TLHG_trigger()) + 1)
   })
   
   observeEvent(input$custom_TLHG_freq, {
@@ -424,12 +423,12 @@ server <- function(input, output, session) {
   
   observeEvent(input$reset_custom_TLHG_freq, {
     values$upload_state <- 'reset'
-    reset_trigger(reset_trigger() + 1)
+    reset_TLHG_trigger(reset_TLHG_trigger() + 1)
   })
   
   
   output$custom_TLHG_freq_output <- renderUI({
-    req(reset_trigger())
+    req(reset_TLHG_trigger())
     
     fileInput(inputId = "custom_TLHG_freq", 
               label = "Custom TLHG distribution (override HelixMTdb's)", 
@@ -1000,6 +999,75 @@ server <- function(input, output, session) {
   # POOLED END
   ##############################################################################
   
+  
+  
+  # CLC input
+  
+  reset_CLC_trigger <- reactiveVal(0)
+  observe({
+    reset_CLC_trigger(isolate(reset_CLC_trigger()) + 1)
+  })
+  
+  observeEvent(input$custom_TLHG_freq, {
+    values$upload_CLC_file <- 'uploaded'
+  })
+  
+  observeEvent(input$reset_custom_TLHG_freq, {
+    values$upload_CLC_file <- 'reset'
+    reset_CLC_trigger(reset_CLC_trigger() + 1)
+  })
+  
+  observeEvent(input$reset_custom_CLC_input, {
+    values$upload_CLC_file <- 'upload_CLC_file'
+    reset_CLC_trigger(reset_CLC_trigger() + 1)
+  })
+  
+  output$custom_CLC_input <- renderUI({
+    req(reset_CLC_trigger())
+    
+    updateTextInput(session, "selected_variants", value = "")
+    updateTextInput(session, "selected_range", value = "1-16569")
+    updateTextInput(session, "selected_range_exclusions", value = "")
+    
+    fileInput(inputId = "custom_CLC_file_import", 
+              label = "CLC Genomics file import", 
+              accept = ".txt")
+  })
+  
+  observeEvent(input$custom_CLC_file_import, {
+    req(input$custom_CLC_file_import)
+    
+    filepath <- input$custom_CLC_file_import$datapath
+    
+    tryCatch({
+      #x <- readLines("~/Hentet/MultiExt-2022H3314-0003A1-1_S5_L001_R1_001 _paired_ _table_.txt", warn = FALSE)
+      x <- readLines(filepath, warn = FALSE)
+      
+      range_idx <- which(x == "Sequence Name\tComparison Range\tCovered Bases")
+      vars_start_idx <- which(x == "Position\tReference\tVariant")
+      vars_end_idx <- which(grepl("Total Differences", x))
+      
+      if (length(range_idx) == 1L) {
+        range_raw <- strsplit(x = x[range_idx + 1L], split = "\t", fixed = TRUE)[[1L]]
+        range_raw <- range_raw[2L]
+        range_raw <- gsub("[", "", range_raw, fixed = TRUE)
+        range_raw <- gsub("]", "", range_raw, fixed = TRUE)
+        range_raw <- gsub("..", "-", range_raw, fixed = TRUE)
+        range_raw <- gsub(" ", ", ", range_raw, fixed = TRUE)
+        updateTextInput(session, "selected_range", value = range_raw)
+      }
+      
+      if (length(vars_start_idx) == 1L && length(vars_end_idx) == 1L) {
+        vars_raw <- strsplit(x = x[seq(vars_start_idx + 1L, vars_end_idx - 1L)], 
+                             split = "\t", fixed = TRUE)
+        vars <- lapply(vars_raw, \(z) paste0(z[1L], z[2L])) |> paste0(collapse = " ")
+        updateTextInput(session, "selected_variants", value = vars)
+      }
+    }, error = function(e) {
+      
+    })
+    
+  })
 }
 
 # Run the application 
