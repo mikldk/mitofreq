@@ -171,6 +171,26 @@ ui <- navbarPage("MitoFREQ",
                           
                           
                           
+                          fluidRow(
+                            column(12,
+                                   h2("Pooled estimate"),
+                                   
+                                   h4("SNV frequency"),
+                                   textOutput("pooled_lr_snv_freq"),
+                                   
+                                   h4("Estimated population frequency"),
+                                   textOutput("pooled_lr_popfreq"),
+                                   
+                                   bslib::value_box(
+                                     title = "LR",
+                                     value = textOutput("pooled_lr"),
+                                     showcase = bsicons::bs_icon("calculator-fill"),
+                                     theme = "primary"
+                                   ),
+                            )
+                          ),
+                          
+                          
                           
                           fluidRow(
                             column(6,
@@ -549,6 +569,8 @@ server <- function(input, output, session) {
   
   
   output$helix_profile_position_summary <- renderTable({
+    tlhg <- req(reac_selected_tlhg())
+    
     ext_res <- req(helix_reac_extended_result())
     vars <- reac_selected_variants()
     
@@ -563,16 +585,22 @@ server <- function(input, output, session) {
                            mitofreq::positions_from_variants(c(var_ignored_range, var_ignored_helix, var_used)))
     
     if (length(unaccounted) != 0L) {
-      stop("Expected 0 unaccounted for positions")
+      #stop("Expected 0 unaccounted for positions, but got: ", paste0(unaccounted, collapse = ", "))
+    }
+    
+    note <- if (length(unaccounted) > 0L)  {
+      paste0('d_helix_refined_long |> filter(Position == ', unaccounted[1L], ', TLHG == "', tlhg, '")')
+    } else {
+      ""
     }
     
     x <- tribble(
-      ~Type, ~Count, ~Positions,
-      "Variants given", length(vars), vars |> paste0(collapse = ", "),
-      "Positions ignored (range)", length(var_ignored_range), var_ignored_range |> paste0(collapse = ", "),
-      "Positions ignored (no Helix info)", length(var_ignored_helix), var_ignored_helix |> paste0(collapse = ", "),
-      "Positions used", length(var_used), var_used |> paste0(collapse = ", ")
-      #, "Positions unaccounted for (sanity check)", length(unaccounted), unaccounted |> paste0(collapse = ", ")
+      ~Type, ~Count, ~Positions, ~Note,
+      "Variants given", length(vars), vars |> paste0(collapse = ", "), "",
+      "Positions ignored (range)", length(var_ignored_range), var_ignored_range |> paste0(collapse = ", "), "",
+      "Positions ignored (no Helix info)", length(var_ignored_helix), var_ignored_helix |> paste0(collapse = ", "), "",
+      "Positions used", length(var_used), var_used |> paste0(collapse = ", "), "",
+      "Positions ignored (e.g., variant info not available)", length(unaccounted), unaccounted |> paste0(collapse = ", "), note
     )
     
     return(x)
@@ -771,6 +799,8 @@ server <- function(input, output, session) {
   
   
   output$gnomAD_profile_position_summary <- renderTable({
+    tlhg <- req(reac_selected_tlhg())
+    
     ext_res <- req(gnomAD_reac_extended_result())
     vars <- reac_selected_variants()
     
@@ -785,16 +815,22 @@ server <- function(input, output, session) {
                            mitofreq::positions_from_variants(c(var_ignored_range, var_ignored_gnomAD, var_used)))
     
     if (length(unaccounted) != 0L) {
-      stop("Expected 0 unaccounted for positions")
+      #stop("Expected 0 unaccounted for positions, but got: ", paste0(unaccounted, collapse = ", "))
+    }
+    
+    note <- if (length(unaccounted) > 0L)  {
+      paste0('d_gnomAD_refined_long |> filter(Position == ', unaccounted[1L], ', TLHG == "', tlhg, '")')
+    } else {
+      ""
     }
     
     x <- tribble(
-      ~Type, ~Count, ~Positions,
-      "Variants given", length(vars), vars |> paste0(collapse = ", "),
-      "Positions ignored (range)", length(var_ignored_range), var_ignored_range |> paste0(collapse = ", "),
-      "Positions ignored (no gnomAD info)", length(var_ignored_gnomAD), var_ignored_gnomAD |> paste0(collapse = ", "),
-      "Positions used", length(var_used), var_used |> paste0(collapse = ", ")#,
-      #"Positions unaccounted for (sanity check)", length(unaccounted), unaccounted |> paste0(collapse = ", ")
+      ~Type, ~Count, ~Positions, ~Note,
+      "Variants given", length(vars), vars |> paste0(collapse = ", "), "",
+      "Positions ignored (range)", length(var_ignored_range), var_ignored_range |> paste0(collapse = ", "), "",
+      "Positions ignored (no gnomAD info)", length(var_ignored_gnomAD), var_ignored_gnomAD |> paste0(collapse = ", "), "",
+      "Positions used", length(var_used), var_used |> paste0(collapse = ", "), "",
+      "Positions ignored (e.g., variant info not available)", length(unaccounted), unaccounted |> paste0(collapse = ", "), note
     )
     
     return(x)
@@ -864,6 +900,102 @@ server <- function(input, output, session) {
   
   ##############################################################################
   # GNOMAD END
+  ##############################################################################
+  
+  
+  ##############################################################################
+  # POOLED START
+  ##############################################################################
+  
+  #pooled_lr_snv_freq
+  #pooled_lr
+  
+  pooled_lr_ingridients <- reactive({
+    tlhg <- req(reac_selected_tlhg())
+    
+    
+    helix_d_SNV <- req(helix_rare_SNV())
+    helix_var <- helix_d_SNV |> mutate(Var = paste0(Position, Profile)) |> pull(Var)
+    gnomAD_d_SNV <- req(gnomAD_rare_SNV())
+    gnomAD_var <- gnomAD_d_SNV |> mutate(Var = paste0(Position, Profile)) |> pull(Var)
+    
+    if (helix_var != gnomAD_var) {
+      return(NULL)
+    } 
+    
+    d_tlhg_dist <- req(gnomAD_reac_get_selected_tlhg_dist())
+    
+    n_tlhg <- d_tlhg_dist |> filter(TLHG == tlhg) |> pull(N)
+    tlhg_num <- n_tlhg
+    tlhg_den <- d_tlhg_dist |> pull(N) |> sum()
+    
+    
+    helix_lr_res <- req(helix_lr_ingridients())
+    gnomAD_lr_res <- req(gnomAD_lr_ingridients())
+    
+    snv_num <- helix_lr_res$snv_num + gnomAD_lr_res$snv_num
+    snv_den <- helix_lr_res$snv_den + gnomAD_lr_res$snv_den
+    
+    popfreq <- (tlhg_num / tlhg_den) * (snv_num / snv_den)
+    
+    list(tlhg_num = tlhg_num, tlhg_den = tlhg_den,
+         snv_num = snv_num, snv_den = snv_den, 
+         popfreq = popfreq)
+  })
+  
+  
+  output$pooled_lr_snv_freq <- renderText({
+    tlhg <- req(reac_selected_tlhg())
+    
+    helix_lr_res <- req(helix_lr_ingridients())
+    helix_d_SNV <- req(helix_rare_SNV())
+    helix_var <- helix_d_SNV |> mutate(Var = paste0(Position, Profile)) |> pull(Var)
+    
+    gnomAD_lr_res <- req(gnomAD_lr_ingridients())
+    gnomAD_d_SNV <- req(gnomAD_rare_SNV())
+    gnomAD_var <- gnomAD_d_SNV |> mutate(Var = paste0(Position, Profile)) |> pull(Var)
+    
+    
+    if (helix_var != gnomAD_var) {
+      isolate(paste0("HelixMTdb and GnomAD chose different variants, hence a pooled estimate is not available."))
+    } else {
+      #isolate(paste0(var, " was observed ", fmt(lr_res$snv_num), " out of a total of ", fmt(lr_res$snv_den), " in TLHG ", tlhg, "."))
+      var <- helix_var # == gnomAD_var
+      txt <- paste0(var, " was observed ", 
+                    fmt(helix_lr_res$snv_num), " + ", fmt(gnomAD_lr_res$snv_num), " = ", fmt(helix_lr_res$snv_num + gnomAD_lr_res$snv_num), 
+                    " out of a total of ", 
+                    fmt(helix_lr_res$snv_den), " + ", fmt(gnomAD_lr_res$snv_den), " = ", fmt(helix_lr_res$snv_den + gnomAD_lr_res$snv_den), 
+                    " in TLHG ", tlhg, ".")
+      #isolate(paste0(var, " was observed ", fmt(lr_res$snv_num), " out of a total of ", fmt(lr_res$snv_den), " in TLHG ", tlhg, "."))
+    }
+  })
+  
+  output$pooled_lr_popfreq <- renderText({
+    lr_res <- req(pooled_lr_ingridients())
+    
+    if (is.null(lr_res)) {
+      paste0("Unavailble")
+    } else {
+      isolate(paste0("(", 
+                     fmt(lr_res$tlhg_num), " / ", fmt(lr_res$tlhg_den), ") x (", 
+                     fmt(lr_res$snv_num), " / ", fmt(lr_res$snv_den), ") = 10^(", fmt(log10(lr_res$popfreq), digits = 4), ") = ",
+                     "1 : ", fmt(1 / lr_res$popfreq)))
+    }
+  })
+  
+  output$pooled_lr <- renderText({
+    lr_res <- req(pooled_lr_ingridients())
+    lr_res <- req(pooled_lr_ingridients())
+    
+    if (is.null(lr_res)) {
+      paste0("Unavailble")
+    } else {
+      isolate(paste0("1 / 10^(", fmt(log10(lr_res$popfreq), digits = 4), ") = ", fmt(1 / lr_res$popfreq)))
+    }
+  })
+  
+  ##############################################################################
+  # POOLED END
   ##############################################################################
   
 }
