@@ -11,7 +11,6 @@ library(readxl)
 # Run locally:
 # git commit -am "Shiny app updated, ready for deployment" && git push
 # remotes::install_github('mikldk/mitofreq')
-# rsconnect::deployApp("inst/MitoFREQ")
 library(mitofreq)
 
 
@@ -348,6 +347,9 @@ server <- function(input, output, session) {
     vars <- input$selected_variants
     
     vars <- gsub(",", " ", vars, fixed = TRUE)
+    vars <- gsub("\r\n", " ", vars, fixed = TRUE)
+    vars <- gsub("\n", " ", vars, fixed = TRUE)
+    vars <- gsub("\t", " ", vars, fixed = TRUE)
     vars <- gsub(" [ ]+", " ", vars)
     
     vars <- strsplit(x = vars, 
