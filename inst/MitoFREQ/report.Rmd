@@ -16,6 +16,8 @@ params:
   pooled_lr_txt: NA
   helix_lr_txt: NA
   gnomAD_lr_txt: NA
+  custom_CLC_file_import: NA
+  mitofreq_version: NA
 ---
 
 ```{r setup, echo = FALSE}
@@ -31,7 +33,24 @@ library(kableExtra)
 
 The content of this report must be verified against the online MitoFREQ app as well as the mentioned data sources.
 
+# MitoFREQ version
+
+```{r, results = "asis"}
+cat(paste0("This report was generated using MitoFREQ version:\n\n", params$mitofreq_version))
+```
+
+MitoFREQ available at
+
+* App: <https://mikldk.shinyapps.io/MitoFREQ/>
+* Source code: <https://github.com/mikldk/mitofreq>
+
 # Input
+
+```{r, results = "asis"}
+if (!is.na(params$custom_CLC_file_import) && params$custom_CLC_file_import != "NA" && params$custom_CLC_file_import != "") {
+  cat(paste0("CLC Genomics file:\n\n`", params$custom_CLC_file_import, "`."))
+}
+```
 
 ## Profile
 

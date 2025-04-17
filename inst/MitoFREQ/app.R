@@ -1081,6 +1081,12 @@ server <- function(input, output, session) {
         range_excl <- "(None)"
       }
       
+      custom_CLC_file_import <- if (!is.null(input$custom_CLC_file_import)) {
+        basename(input$custom_CLC_file_import$name)
+      } else {
+        NA
+      }
+      
       params <- list(variants = vars,
                      range = input$selected_range,
                      range_exclusions = range_excl,
@@ -1091,7 +1097,9 @@ server <- function(input, output, session) {
                      pooled_lr_snv_freq = generate_pooled_lr_snv_freq(),
                      pooled_lr_txt = pooled_lr_txt,
                      helix_lr_txt = helix_lr_txt,
-                     gnomAD_lr_txt = gnomAD_lr_txt)
+                     gnomAD_lr_txt = gnomAD_lr_txt,
+                     custom_CLC_file_import = custom_CLC_file_import,
+                     mitofreq_version = as.character(packageVersion("mitofreq")))
       
       print(params)
       
