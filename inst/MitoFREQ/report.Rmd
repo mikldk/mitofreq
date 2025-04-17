@@ -1,0 +1,112 @@
+---
+title: "MitoFREQ"
+date: "`r format(Sys.time(), '%Y-%m-%d')` (YYYY-MM-DD)"
+output: 
+  pdf_document:
+    number_sections: true
+params:
+  variants: NA
+  range: NA
+  range_exclusions: NA
+  TLHG: NA
+  TLHG_freq: NA
+  helix_lr_snv_freq: NA
+  gnomAD_lr_snv_freq: NA
+  pooled_lr_snv_freq: NA
+  pooled_lr_txt: NA
+  helix_lr_txt: NA
+  gnomAD_lr_txt: NA
+---
+
+```{r setup, echo = FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r, message = FALSE}
+library(dplyr)
+library(kableExtra)
+```
+
+# Disclaimer
+
+The content of this report must be verified against the online MitoFREQ app as well as the mentioned data sources.
+
+# Input
+
+## Profile
+
+```{r, results = "asis"}
+cat(paste0(params$variants, collapse = " "))
+```
+
+## TLHG
+
+```{r, results = "asis"}
+cat(params$TLHG)
+```
+
+## Range
+
+```{r, results = "asis"}
+cat(params$range)
+```
+
+## Range exclusions
+
+```{r, results = "asis"}
+cat(params$range_exclusions)
+```
+
+
+# Conclusion
+
+## TLHG frequency (HelixMTdb/custom)
+
+```{r, results = "asis"}
+cat(params$TLHG_freq)
+```
+
+## SNV frequency
+
+
+### HelixMTdb
+
+```{r, results = "asis"}
+cat(params$helix_lr_snv_freq)
+```
+
+### GnomAD
+
+```{r, results = "asis"}
+cat(params$gnomAD_lr_snv_freq)
+```
+
+### Pooled
+
+```{r, results = "asis"}
+cat(params$pooled_lr_snv_freq)
+```
+
+
+
+## Likelihood ratio
+
+### Pooled
+
+```{r, results = "asis"}
+cat(params$pooled_lr_txt)
+```
+
+### HelixMTdb
+
+```{r, results = "asis"}
+cat(params$helix_lr_txt)
+```
+
+### GnomAD
+
+```{r, results = "asis"}
+cat(params$gnomAD_lr_txt)
+```
+
+

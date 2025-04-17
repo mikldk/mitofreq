@@ -100,7 +100,10 @@ ui <- navbarPage("MitoFREQ",
                           fluidRow(
                             column(12,
                                    h3("Input profile"),
-                                   tableOutput('profile_selected')
+                                   tableOutput('profile_selected'),
+                                   
+                                   h3("Download report"),
+                                   downloadButton("report", "Generate report")
                             )
                           ),
                           
@@ -502,13 +505,9 @@ server <- function(input, output, session) {
   })
   
   helix_reac_extended_result <- reactive({
-    #req(reac_selected_variants())
-    req(reac_selected_tlhg())
-    req(reac_selected_range())
-    
-    vars <- reac_selected_variants()
+    vars <- req(reac_selected_variants())
     tlhg <- req(reac_selected_tlhg())
-    range <- reac_selected_range()
+    range <- req(reac_selected_range())
     
     ext_res <- mitofreq::extend_profile(
       variants = vars, 
@@ -568,8 +567,7 @@ server <- function(input, output, session) {
   })
   
   
-  
-  output$helix_profile_position_summary <- renderTable({
+  generate_helix_profile_position_summary <- function()  {
     tlhg <- req(reac_selected_tlhg())
     
     ext_res <- req(helix_reac_extended_result())
@@ -581,7 +579,7 @@ server <- function(input, output, session) {
       filter(BaseType == "Alt") |> 
       mutate(Variant = paste0(Position, Profile)) |> 
       pull(Variant)
-
+    
     unaccounted <- setdiff(mitofreq::positions_from_variants(vars), 
                            mitofreq::positions_from_variants(c(var_ignored_range, var_ignored_helix, var_used)))
     
@@ -605,6 +603,10 @@ server <- function(input, output, session) {
     )
     
     return(x)
+  }
+  
+  output$helix_profile_position_summary <- renderTable({
+    generate_helix_profile_position_summary()
   })
   
   
@@ -629,44 +631,51 @@ server <- function(input, output, session) {
     datatable(d_profile_ext, rownames = FALSE)
   })
   
-  
-  output$helix_lr_tlhg_freq <- renderText({
+  generate_helix_lr_tlhg_freq <- function() {
     tlhg <- req(reac_selected_tlhg())
     d_tlhg_dist <- req(helix_reac_get_selected_tlhg_dist())
     
     n_tlhg <- d_tlhg_dist |> filter(TLHG == tlhg) |> pull(N)
     N_TLHG_all <- d_tlhg_dist |> pull(N) |> sum()
     
-    isolate(paste0("TLHG ", tlhg, " was observed ", fmt(n_tlhg), " out of a total of ", fmt(N_TLHG_all), "."))
+    paste0("TLHG ", tlhg, " was observed ", fmt(n_tlhg), " out of a total of ", fmt(N_TLHG_all), ".")
+  }
+  
+  output$helix_lr_tlhg_freq <- renderText({
+    generate_helix_lr_tlhg_freq()
   })
   
   output$helix_lr_snv <- renderText({
     d_SNV <- req(helix_rare_SNV())
-    isolate(d_SNV |> mutate(Var = paste0(Position, Profile)) |> pull(Var))
+    d_SNV |> mutate(Var = paste0(Position, Profile)) |> pull(Var)
   })
   
-  output$helix_lr_snv_freq <- renderText({
+  generate_helix_lr_snv_freq <- function() {
     lr_res <- req(helix_lr_ingridients())
     d_SNV <- req(helix_rare_SNV())
     tlhg <- req(reac_selected_tlhg())
     var <- d_SNV |> mutate(Var = paste0(Position, Profile)) |> pull(Var)
     
-    isolate(paste0(var, " was observed ", fmt(lr_res$snv_num), " out of a total of ", fmt(lr_res$snv_den), " in TLHG ", tlhg, "."))
+    paste0(var, " was observed ", fmt(lr_res$snv_num), " out of a total of ", fmt(lr_res$snv_den), " in TLHG ", tlhg, ".")
+  }
+  
+  output$helix_lr_snv_freq <- renderText({
+    generate_helix_lr_snv_freq()
   })
   
   output$helix_lr_popfreq <- renderText({
     lr_res <- req(helix_lr_ingridients())
     
-    isolate(paste0("(", 
-                   fmt(lr_res$tlhg_num), " / ", fmt(lr_res$tlhg_den), ") x (", 
-                   fmt(lr_res$snv_num), " / ", fmt(lr_res$snv_den), ") = 10^(", fmt(log10(lr_res$popfreq), digits = 4), ") = ",
-                   "1 : ", fmt(1 / lr_res$popfreq)))
+    paste0("(", 
+           fmt(lr_res$tlhg_num), " / ", fmt(lr_res$tlhg_den), ") x (", 
+           fmt(lr_res$snv_num), " / ", fmt(lr_res$snv_den), ") = 10^(", fmt(log10(lr_res$popfreq), digits = 4), ") = ",
+           "1 : ", fmt(1 / lr_res$popfreq))
   })
   
   output$helix_lr <- renderText({
     lr_res <- req(helix_lr_ingridients())
     
-    isolate(paste0("1 / 10^(", fmt(log10(lr_res$popfreq), digits = 4), ") = ", fmt(1 / lr_res$popfreq)))
+    paste0("1 / 10^(", fmt(log10(lr_res$popfreq), digits = 4), ") = ", fmt(1 / lr_res$popfreq))
   })
   
   ##############################################################################
@@ -685,60 +694,12 @@ server <- function(input, output, session) {
   ##############################################################################
   # GNOMAD START
   ##############################################################################
-  
-  gnomAD_reac_get_selected_tlhg_dist <- reactive({
-    return(helix_reac_get_selected_tlhg_dist())
-    
-    # if (is.null(values$upload_state)) {
-    #   return(d_gnomAD_TLHG_freq)
-    # } else if (values$upload_state == 'reset') {
-    #   return(d_gnomAD_TLHG_freq)
-    # } 
-    # 
-    # # else if (values$upload_state == 'uploaded') 
-    # 
-    # d <- tryCatch({
-    #   readxl::read_excel(input$custom_TLHG_freq$datapath) |> as_tibble()
-    # }, warning = function(w) {
-    #   d_gnomAD_TLHG_freq
-    # }, error = function(e) {
-    #   d_gnomAD_TLHG_freq
-    # })
-    # 
-    # if (!isTRUE(all.equal(colnames(d), c("TLHG", "N")))) {
-    #   sendSweetAlert(
-    #     session = session,
-    #     title = "Error...",
-    #     text = "Column names must be TLHG and N.",
-    #     type = "error"
-    #   )
-    #   return(d_gnomAD_TLHG_freq)
-    # } 
-    # 
-    # if (!isTRUE(all.equal(d$TLHG, c("A", "C", "D", "E", "F", "G", "H", "HV", "I", "J", "K", "L0", 
-    #                                 "L1", "L2", "L3", "L4-6", "M", "N", "O", "P", "Q", "R/B", "S", 
-    #                                 "T", "U", "V", "W", "X", "Y", "Z")))) {
-    #   sendSweetAlert(
-    #     session = session,
-    #     title = "Error...",
-    #     text = "TLHGs (A, C, D, ...) must follow template.",
-    #     type = "error"
-    #   )
-    #   
-    #   return(d_gnomAD_TLHG_freq)
-    # } 
-    # 
-    # return(d)
-  })
+
   
   gnomAD_reac_extended_result <- reactive({
-    #req(reac_selected_variants())
-    req(reac_selected_tlhg())
-    req(reac_selected_range())
-    
-    vars <- reac_selected_variants()
+    vars <- req(reac_selected_variants())
     tlhg <- req(reac_selected_tlhg())
-    range <- reac_selected_range()
+    range <- req(reac_selected_range())
     
     ext_res <- mitofreq::extend_profile(
       variants = vars, 
@@ -751,9 +712,6 @@ server <- function(input, output, session) {
   })
   
   gnomAD_reac_extended_profile <- reactive({
-    #req(reac_selected_variants())
-    req(reac_selected_tlhg())
-    
     ext_res <- gnomAD_reac_extended_result()
     
     d_profile_ext <- ext_res$d_profile_ext
@@ -778,7 +736,7 @@ server <- function(input, output, session) {
   
   gnomAD_lr_ingridients <- reactive({
     tlhg <- req(reac_selected_tlhg())
-    d_tlhg_dist <- req(gnomAD_reac_get_selected_tlhg_dist())
+    d_tlhg_dist <- req(helix_reac_get_selected_tlhg_dist())
     
     n_tlhg <- d_tlhg_dist |> filter(TLHG == tlhg) |> pull(N)
     
@@ -859,44 +817,42 @@ server <- function(input, output, session) {
     datatable(d_profile_ext, rownames = FALSE)
   })
   
-  
+
   output$gnomAD_lr_tlhg_freq <- renderText({
-    tlhg <- req(reac_selected_tlhg())
-    d_tlhg_dist <- req(gnomAD_reac_get_selected_tlhg_dist())
-    
-    n_tlhg <- d_tlhg_dist |> filter(TLHG == tlhg) |> pull(N)
-    N_TLHG_all <- d_tlhg_dist |> pull(N) |> sum()
-    
-    isolate(paste0("TLHG ", tlhg, " was observed ", fmt(n_tlhg), " out of a total of ", fmt(N_TLHG_all), "."))
+    generate_helix_lr_tlhg_freq()
   })
   
   output$gnomAD_lr_snv <- renderText({
     d_SNV <- req(gnomAD_rare_SNV())
-    isolate(d_SNV |> mutate(Var = paste0(Position, Profile)) |> pull(Var))
+    d_SNV |> mutate(Var = paste0(Position, Profile)) |> pull(Var)
   })
   
-  output$gnomAD_lr_snv_freq <- renderText({
+  generate_gnomAD_lr_snv_freq <- function(){
     lr_res <- req(gnomAD_lr_ingridients())
     d_SNV <- req(gnomAD_rare_SNV())
     tlhg <- req(reac_selected_tlhg())
     var <- d_SNV |> mutate(Var = paste0(Position, Profile)) |> pull(Var)
     
-    isolate(paste0(var, " was observed ", fmt(lr_res$snv_num), " out of a total of ", fmt(lr_res$snv_den), " in TLHG ", tlhg, "."))
+    paste0(var, " was observed ", fmt(lr_res$snv_num), " out of a total of ", fmt(lr_res$snv_den), " in TLHG ", tlhg, ".")
+  }
+  
+  output$gnomAD_lr_snv_freq <- renderText({
+    generate_gnomAD_lr_snv_freq()
   })
   
   output$gnomAD_lr_popfreq <- renderText({
     lr_res <- req(gnomAD_lr_ingridients())
     
-    isolate(paste0("(", 
-                   fmt(lr_res$tlhg_num), " / ", fmt(lr_res$tlhg_den), ") x (", 
-                   fmt(lr_res$snv_num), " / ", fmt(lr_res$snv_den), ") = 10^(", fmt(log10(lr_res$popfreq), digits = 4), ") = ",
-                   "1 : ", fmt(1 / lr_res$popfreq)))
+    paste0("(", 
+           fmt(lr_res$tlhg_num), " / ", fmt(lr_res$tlhg_den), ") x (", 
+           fmt(lr_res$snv_num), " / ", fmt(lr_res$snv_den), ") = 10^(", fmt(log10(lr_res$popfreq), digits = 4), ") = ",
+           "1 : ", fmt(1 / lr_res$popfreq))
   })
   
   output$gnomAD_lr <- renderText({
     lr_res <- req(gnomAD_lr_ingridients())
     
-    isolate(paste0("1 / 10^(", fmt(log10(lr_res$popfreq), digits = 4), ") = ", fmt(1 / lr_res$popfreq)))
+    paste0("1 / 10^(", fmt(log10(lr_res$popfreq), digits = 4), ") = ", fmt(1 / lr_res$popfreq))
   })
   
   ##############################################################################
@@ -924,7 +880,7 @@ server <- function(input, output, session) {
       return(NULL)
     } 
     
-    d_tlhg_dist <- req(gnomAD_reac_get_selected_tlhg_dist())
+    d_tlhg_dist <- req(helix_reac_get_selected_tlhg_dist())
     
     n_tlhg <- d_tlhg_dist |> filter(TLHG == tlhg) |> pull(N)
     tlhg_num <- n_tlhg
@@ -945,7 +901,7 @@ server <- function(input, output, session) {
   })
   
   
-  output$pooled_lr_snv_freq <- renderText({
+  generate_pooled_lr_snv_freq <- function(){
     tlhg <- req(reac_selected_tlhg())
     
     helix_lr_res <- req(helix_lr_ingridients())
@@ -958,29 +914,33 @@ server <- function(input, output, session) {
     
     
     if (helix_var != gnomAD_var) {
-      isolate(paste0("HelixMTdb and GnomAD chose different variants, hence a pooled estimate is not available."))
+      return(paste0("HelixMTdb and GnomAD chose different variants, hence a pooled estimate is not available."))
     } else {
-      #isolate(paste0(var, " was observed ", fmt(lr_res$snv_num), " out of a total of ", fmt(lr_res$snv_den), " in TLHG ", tlhg, "."))
       var <- helix_var # == gnomAD_var
       txt <- paste0(var, " was observed ", 
                     fmt(helix_lr_res$snv_num), " + ", fmt(gnomAD_lr_res$snv_num), " = ", fmt(helix_lr_res$snv_num + gnomAD_lr_res$snv_num), 
                     " out of a total of ", 
                     fmt(helix_lr_res$snv_den), " + ", fmt(gnomAD_lr_res$snv_den), " = ", fmt(helix_lr_res$snv_den + gnomAD_lr_res$snv_den), 
                     " in TLHG ", tlhg, ".")
-      #isolate(paste0(var, " was observed ", fmt(lr_res$snv_num), " out of a total of ", fmt(lr_res$snv_den), " in TLHG ", tlhg, "."))
+      return(txt)
     }
+  }
+  
+  
+  output$pooled_lr_snv_freq <- renderText({
+    generate_pooled_lr_snv_freq()
   })
   
   output$pooled_lr_popfreq <- renderText({
     lr_res <- req(pooled_lr_ingridients())
     
     if (is.null(lr_res)) {
-      paste0("Unavailble")
+      paste0("Unavailable")
     } else {
-      isolate(paste0("(", 
-                     fmt(lr_res$tlhg_num), " / ", fmt(lr_res$tlhg_den), ") x (", 
-                     fmt(lr_res$snv_num), " / ", fmt(lr_res$snv_den), ") = 10^(", fmt(log10(lr_res$popfreq), digits = 4), ") = ",
-                     "1 : ", fmt(1 / lr_res$popfreq)))
+      paste0("(", 
+             fmt(lr_res$tlhg_num), " / ", fmt(lr_res$tlhg_den), ") x (", 
+             fmt(lr_res$snv_num), " / ", fmt(lr_res$snv_den), ") = 10^(", fmt(log10(lr_res$popfreq), digits = 4), ") = ",
+             "1 : ", fmt(1 / lr_res$popfreq))
     }
   })
   
@@ -989,9 +949,9 @@ server <- function(input, output, session) {
     lr_res <- req(pooled_lr_ingridients())
     
     if (is.null(lr_res)) {
-      paste0("Unavailble")
+      paste0("Unavailable")
     } else {
-      isolate(paste0("1 / 10^(", fmt(log10(lr_res$popfreq), digits = 4), ") = ", fmt(1 / lr_res$popfreq)))
+      paste0("1 / 10^(", fmt(log10(lr_res$popfreq), digits = 4), ") = ", fmt(1 / lr_res$popfreq))
     }
   })
   
@@ -1025,9 +985,13 @@ server <- function(input, output, session) {
   output$custom_CLC_input <- renderUI({
     req(reset_CLC_trigger())
     
-    updateTextInput(session, "selected_variants", value = "")
-    updateTextInput(session, "selected_range", value = "1-16569")
-    updateTextInput(session, "selected_range_exclusions", value = "")
+    query <- parseQueryString(session$clientData$url_search)
+    
+    if (is.null(query[['v']])) {
+      updateTextInput(session, "selected_variants", value = "")
+      updateTextInput(session, "selected_range", value = "1-16569")
+      updateTextInput(session, "selected_range_exclusions", value = "")
+    }
     
     fileInput(inputId = "custom_CLC_file_import", 
               label = "CLC Genomics file import", 
@@ -1060,7 +1024,7 @@ server <- function(input, output, session) {
       if (length(vars_start_idx) == 1L && length(vars_end_idx) == 1L) {
         vars_raw <- strsplit(x = x[seq(vars_start_idx + 1L, vars_end_idx - 1L)], 
                              split = "\t", fixed = TRUE)
-        vars <- lapply(vars_raw, \(z) paste0(z[1L], z[2L])) |> paste0(collapse = " ")
+        vars <- lapply(vars_raw, \(z) paste0(z[1L], z[3L])) |> paste0(collapse = " ")
         updateTextInput(session, "selected_variants", value = vars)
       }
     }, error = function(e) {
@@ -1068,6 +1032,75 @@ server <- function(input, output, session) {
     })
     
   })
+  
+  
+  output$report <- downloadHandler(
+    # For PDF output, change this to "report.pdf"
+    filename = "report.pdf",
+    content = function(file) {
+      tempReport <- file.path(tempdir(), "report.Rmd")
+      file.copy("report.Rmd", tempReport, overwrite = TRUE)
+      
+      cat("report 1")
+      
+      pooled_lr_res <- pooled_lr_ingridients()
+      cat("report 2")
+      pooled_lr_txt <- if (is.null(pooled_lr_res)) {
+        "Unavailable"
+      } else {
+        paste0("1 / (", 
+                       fmt(pooled_lr_res$tlhg_num), " / ", fmt(pooled_lr_res$tlhg_den), ") x (", 
+                       fmt(pooled_lr_res$snv_num), " / ", fmt(pooled_lr_res$snv_den), ") = 1 / 10^(", fmt(log10(pooled_lr_res$popfreq), digits = 4), ") = ",
+                       fmt(1 / pooled_lr_res$popfreq))
+      }
+      cat("report 3")
+      
+      helix_lr_res <- helix_lr_ingridients()
+      cat("report 4")
+      helix_lr_txt <- paste0("1 / (", 
+                     fmt(helix_lr_res$tlhg_num), " / ", fmt(helix_lr_res$tlhg_den), ") x (", 
+                     fmt(helix_lr_res$snv_num), " / ", fmt(helix_lr_res$snv_den), ") = 1 / 10^(", fmt(log10(helix_lr_res$popfreq), digits = 4), ") = ",
+                     fmt(1 / helix_lr_res$popfreq))
+      cat("report 5")
+      gnomAD_lr_res <- gnomAD_lr_ingridients()
+      gnomAD_lr_txt <- paste0("1 / (", 
+                             fmt(gnomAD_lr_res$tlhg_num), " / ", fmt(gnomAD_lr_res$tlhg_den), ") x (", 
+                             fmt(gnomAD_lr_res$snv_num), " / ", fmt(gnomAD_lr_res$snv_den), ") = 1 / 10^(", fmt(log10(gnomAD_lr_res$popfreq), digits = 4), ") = ",
+                             fmt(1 / gnomAD_lr_res$popfreq))
+      
+      cat("report 6")
+      vars <- reac_selected_variants()
+      if (length(vars) == 0L) {
+        vars <- "(rCRS)"
+      }
+      
+      cat("report 7")
+      
+      range_excl <- input$selected_range_exclusions
+      if (is.null(range_excl) || nchar(range_excl) == 0) {
+        range_excl <- "(None)"
+      }
+      
+      params <- list(variants = vars,
+                     range = input$selected_range,
+                     range_exclusions = range_excl,
+                     TLHG = input$selected_tlhg,
+                     TLHG_freq = generate_helix_lr_tlhg_freq(), 
+                     helix_lr_snv_freq = generate_helix_lr_snv_freq(),
+                     gnomAD_lr_snv_freq = generate_gnomAD_lr_snv_freq(),
+                     pooled_lr_snv_freq = generate_pooled_lr_snv_freq(),
+                     pooled_lr_txt = pooled_lr_txt,
+                     helix_lr_txt = helix_lr_txt,
+                     gnomAD_lr_txt = gnomAD_lr_txt)
+      
+      print(params)
+      
+      rmarkdown::render(tempReport, output_file = file,
+                        params = params,
+                        envir = new.env(parent = globalenv())
+      )
+    }
+  )
 }
 
 # Run the application 
