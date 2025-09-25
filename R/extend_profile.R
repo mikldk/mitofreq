@@ -93,9 +93,17 @@ extend_profile <- function(variants,
   # variants <- c("21AT", "263G", "9150G")
   # tlhg <- "H"
   
+  # variants <- c("597T")
+  # tlhg <- "L0"
+  # range = 1:16569; d_SNV_long = d_gnomAD_refined_long; only_simple_ref_alt = TRUE
+  
   # variants <- c("93G", "263G", "315.1C", "477C", "16519C")
   # tlhg <- "H"
   # range <- parse_range("16024-576")
+  
+  if (grepl(" ", variants)) {
+    variants <- strsplit(variants, " ", fixed = TRUE)[[1L]]
+  }
   
   tlhg <- unique(tlhg)
   stopifnot(length(tlhg) == 1L)
@@ -111,7 +119,7 @@ extend_profile <- function(variants,
                               Variant = variants)
   
   # Annotate with rCRS so get a reference-free profile
-  d_rCRS_range <- d_rCRS |> 
+  d_rCRS_range <- mitofreq::d_rCRS |> 
     filter(Position %in% range) |> 
     left_join(d_profile, by = "Position")
   #d_rCRS_range |> filter(!is.na(Base))
@@ -178,6 +186,7 @@ extend_profile <- function(variants,
                   N_TLHG, n_Base = n, p_Base)
   
   #d_all_SNV_prob
+  #d_all_SNV_prob |> filter(Position == 597)
   #d_all_SNV_prob |> dplyr::arrange(p_Base)
   if (FALSE) {
     d_all_SNV_prob |> dplyr::arrange(p_Base)
