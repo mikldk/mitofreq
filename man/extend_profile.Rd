@@ -8,7 +8,8 @@ extend_profile(
   variants,
   tlhg,
   range = 1:16569,
-  d_SNV_long = d_helix_refined_long
+  d_SNV_long = d_helix_refined_long,
+  only_simple_ref_alt = TRUE
 )
 }
 \arguments{
@@ -19,8 +20,16 @@ extend_profile(
 \item{range}{Positions range (default = 1:16569)}
 
 \item{d_SNV_long}{Typically, \code{d_helix_refined_long} or \code{d_gnomAD_refined_long}}
+
+\item{only_simple_ref_alt}{Only consider simple (one base) reference and alternative}
 }
 \description{
 Typically, either Helix (\code{d_helix_refined_long}) or
 gnomAD (\code{d_gnomAD_refined_long}).
+}
+\examples{
+ext_prof <- extend_profile(c("263G", "16519C"), "H")
+ext_prof
+
+
 }

@@ -75,14 +75,21 @@ parse_range <- function(range_str) {
 #' @param tlhg Top-level haplogroup
 #' @param range Positions range (default = 1:16569)
 #' @param d_SNV_long Typically, `d_helix_refined_long` or `d_gnomAD_refined_long`
+#' @param only_simple_ref_alt Only consider simple (one base) reference and alternative
 #' 
-#' @importFrom dplyr select filter pull anti_join semi_join left_join summarise group_by mutate
+#' @examples
+#' ext_prof <- extend_profile(c("263G", "16519C"), "H")
+#' ext_prof
+#' 
+#' 
+#' @importFrom dplyr select rename filter pull anti_join semi_join left_join summarise group_by mutate
 #' @importFrom tibble tibble
 #' @export
 extend_profile <- function(variants, 
                            tlhg, 
                            range = 1:16569, 
-                           d_SNV_long = d_helix_refined_long) {
+                           d_SNV_long = d_helix_refined_long,
+                           only_simple_ref_alt = TRUE) {
   # variants <- c("21AT", "263G", "9150G")
   # tlhg <- "H"
   
@@ -97,12 +104,35 @@ extend_profile <- function(variants,
   pos <- positions_from_variants(variants)
   base <- bases_from_variants(variants)
   
+  stopifnot(all(pos %in% range))
+  
   d_profile <- tibble::tibble(Position = pos, 
                               Base = base, 
                               Variant = variants)
   
+  # Annotate with rCRS so get a reference-free profile
+  d_rCRS_range <- d_rCRS |> 
+    filter(Position %in% range) |> 
+    left_join(d_profile, by = "Position")
+  #d_rCRS_range |> filter(!is.na(Base))
+  d_profile_ref_free <- d_rCRS_range |> 
+    mutate(Base = ifelse(!is.na(Base), Base, Ref),
+           Variant = ifelse(!is.na(Variant), Variant, paste0(Position, Ref))
+    ) |> 
+    dplyr::rename(rCRS = Ref)
+  
+  if (only_simple_ref_alt) {
+    d_profile_ref_free <- d_profile_ref_free |> 
+      filter(nchar(rCRS) == 1L, nchar(Base) == 1L)
+  }
+  
   d_tmp_SNP_HG <- d_SNV_long |> 
     dplyr::filter(TLHG == tlhg) 
+  
+  if (only_simple_ref_alt) {
+    d_tmp_SNP_HG <- d_tmp_SNP_HG |> 
+      filter(nchar(Ref) == 1L, nchar(Base) == 1L)
+  }
   
   # Not found
   if (nrow(d_tmp_SNP_HG) <= 0L) {
@@ -111,26 +141,28 @@ extend_profile <- function(variants,
 
   # Remove positions not in range:
   d_tmp_range <- tibble(Position = range)
-  d_variants_ignored_range <- d_profile |> 
+  d_variants_ignored_range <- d_profile_ref_free |> 
     dplyr::anti_join(d_tmp_range, by = "Position")
   
   # Remove positions not in d_SNV:
   d_variants_ignored <- d_profile |> 
     dplyr::anti_join(d_tmp_SNP_HG, by = "Position")
 
-  d_only_SNV <- d_profile |>
+  d_only_SNV <- d_profile_ref_free |>
     dplyr::semi_join(d_tmp_range, by = "Position") |> 
     dplyr::semi_join(d_tmp_SNP_HG, by = "Position")
   
   # Extend by ALL positions:
   d_all_SNV_prob <- d_tmp_SNP_HG |> 
     dplyr::semi_join(d_tmp_range, by = "Position") |> 
-    dplyr::left_join(d_only_SNV |> dplyr::select(Position, Base, Variant), by = c("Position", "Base")) |> 
+    dplyr::left_join(d_only_SNV |> dplyr::select(Position, rCRS, Base, Variant), by = c("Position", "Base")) |> 
     dplyr::select(-TLHG) |> 
     dplyr::group_by(Position) |> 
     dplyr::summarise(
       Ref = Ref[1L],
       var_present = any(!is.na(Variant)),
+      rCRS = rCRS[which(!is.na(rCRS))[1L]],
+      
       idx = ifelse(var_present, 
                    which(!is.na(Variant)), 
                    which(Type == "Ref"))[1L],
@@ -142,10 +174,19 @@ extend_profile <- function(variants,
       .groups = "drop") |> 
     dplyr::mutate(p_Base = n / N_TLHG) |> 
     dplyr::select(-var_present, -idx) |> 
-    dplyr::select(Position, Ref, Profile = Base, BaseType = Type, 
+    dplyr::select(Position, rCRS, Ref, Profile = Base, BaseType = Type, 
                   N_TLHG, n_Base = n, p_Base)
   
   #d_all_SNV_prob
+  #d_all_SNV_prob |> dplyr::arrange(p_Base)
+  if (FALSE) {
+    d_all_SNV_prob |> dplyr::arrange(p_Base)
+    
+    d_helix_refined_long |> filter(nchar(Ref) != 1L) |> print(n = Inf)
+    
+    d_helix_refined_long |> filter(Position == 5653)
+    d_gnomAD_refined_long |> filter(Position == 5653, TLHG == "H")
+  }
   
   return(list(
     d_profile_ext = d_all_SNV_prob,
