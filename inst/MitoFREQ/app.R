@@ -6,6 +6,7 @@ library(DT)
 library(dplyr)
 library(tibble)
 library(readxl)
+library(shinyalert)
 
 
 # Run locally:
@@ -14,7 +15,7 @@ library(readxl)
 library(mitofreq)
 
 
-TLHG_choices <- mitofreq::d_helix_TLHG_freq |> pull(TLHG)
+TLHG_choices <- mitofreq::d_gnomAD_refined_long |> pull(TLHG) |> unique()
 
 fmt <- function(x, digits = 0, ...) {
   formatC(x, format = "f", big.mark = ",", decimal.mark = ".", digits = digits, ...)
@@ -516,6 +517,10 @@ server <- function(input, output, session) {
       d_SNV_long = d_helix_refined_long
     )
     
+    if (is.null(ext_res)) {
+      return(NA)
+    }
+    
     return(ext_res)
   })
   
@@ -524,6 +529,10 @@ server <- function(input, output, session) {
     req(reac_selected_tlhg())
     
     ext_res <- helix_reac_extended_result()
+    
+    if (is.null(ext_res)) {
+      return(NULL)
+    }
     
     d_profile_ext <- ext_res$d_profile_ext
     return(d_profile_ext)
@@ -708,11 +717,20 @@ server <- function(input, output, session) {
       d_SNV_long = d_gnomAD_refined_long
     )
     
+    if (is.null(ext_res)) {
+      shinyalert(title = "Error", text = "No gnomAD-data for selected TLHG was found.", type = "error")
+      return(NULL)
+    }
+    
     return(ext_res)
   })
   
   gnomAD_reac_extended_profile <- reactive({
     ext_res <- gnomAD_reac_extended_result()
+    
+    if (is.null(ext_res)) {
+      return(NULL)
+    }
     
     d_profile_ext <- ext_res$d_profile_ext
     return(d_profile_ext)
@@ -723,6 +741,10 @@ server <- function(input, output, session) {
     req(reac_selected_tlhg())
     
     ext_res <- gnomAD_reac_extended_result()
+    
+    if (is.null(ext_res)) {
+      return(NULL)
+    }
     
     d_profile_ext <- ext_res$d_profile_ext
     
@@ -741,6 +763,10 @@ server <- function(input, output, session) {
     n_tlhg <- d_tlhg_dist |> filter(TLHG == tlhg) |> pull(N)
     
     d_SNV <- req(gnomAD_rare_SNV())
+    
+    if (is.null(d_SNV)) {
+      return(NULL)
+    }
     
     tlhg_num <- n_tlhg
     tlhg_den <- d_tlhg_dist |> pull(N) |> sum()
@@ -761,6 +787,11 @@ server <- function(input, output, session) {
     tlhg <- req(reac_selected_tlhg())
     
     ext_res <- req(gnomAD_reac_extended_result())
+    
+    if (is.null(ext_res)) {
+      return(tibble())
+    }
+    
     vars <- reac_selected_variants()
     
     var_ignored_range <- ext_res$d_variants_ignored_range |> pull(Variant)
@@ -800,7 +831,13 @@ server <- function(input, output, session) {
   
   
   output$gnomAD_profile_extended_nonrcrs <- renderDataTable({
-    d_profile_ext <- req(gnomAD_reac_extended_profile()) |> 
+    d_profile_ext <- req(gnomAD_reac_extended_profile()) 
+    
+    if (is.null(d_profile_ext)) {
+      return(datatable(tibble()))
+    }
+    
+    d_profile_ext <- d_profile_ext |> 
       filter(BaseType == "Alt") |> 
       select(Position, BaseType, Ref, Profile, N_TLHG, n_Base, p_Base) 
     
@@ -809,7 +846,13 @@ server <- function(input, output, session) {
   
   
   output$gnomAD_profile_extended <- renderDataTable({
-    d_profile_ext <- req(gnomAD_reac_extended_profile()) |> 
+    d_profile_ext <- req(gnomAD_reac_extended_profile()) 
+    
+    if (is.null(d_profile_ext)) {
+      return(datatable(tibble()))
+    }
+    
+    d_profile_ext <- d_profile_ext |> 
       #mutate(rCRS = ifelse(Base == Ref, "x", "")) |> 
       arrange(p_Base) |> 
       select(Position, BaseType, Ref, Profile, N_TLHG, n_Base, p_Base) 
@@ -824,12 +867,22 @@ server <- function(input, output, session) {
   
   output$gnomAD_lr_snv <- renderText({
     d_SNV <- req(gnomAD_rare_SNV())
+    
+    if (is.null(d_SNV)) {
+      return("GnomAD did not contain information about the selected TLHG.")
+    }
+
     d_SNV |> mutate(Var = paste0(Position, Profile)) |> pull(Var)
   })
   
   generate_gnomAD_lr_snv_freq <- function(){
     lr_res <- req(gnomAD_lr_ingridients())
     d_SNV <- req(gnomAD_rare_SNV())
+    
+    if (is.null(lr_res) || is.null(d_SNV)) {
+      return("GnomAD did not contain information about the selected TLHG.")
+    }
+    
     tlhg <- req(reac_selected_tlhg())
     var <- d_SNV |> mutate(Var = paste0(Position, Profile)) |> pull(Var)
     
@@ -843,6 +896,10 @@ server <- function(input, output, session) {
   output$gnomAD_lr_popfreq <- renderText({
     lr_res <- req(gnomAD_lr_ingridients())
     
+    if (is.null(lr_res)) {
+      return("GnomAD did not contain information about the selected TLHG.")
+    }
+    
     paste0("(", 
            fmt(lr_res$tlhg_num), " / ", fmt(lr_res$tlhg_den), ") x (", 
            fmt(lr_res$snv_num), " / ", fmt(lr_res$snv_den), ") = 10^(", fmt(log10(lr_res$popfreq), digits = 4), ") = ",
@@ -851,6 +908,10 @@ server <- function(input, output, session) {
   
   output$gnomAD_lr <- renderText({
     lr_res <- req(gnomAD_lr_ingridients())
+    
+    if (is.null(lr_res)) {
+      return("GnomAD did not contain information about the selected TLHG.")
+    }
     
     paste0("1 / 10^(", fmt(log10(lr_res$popfreq), digits = 4), ") = ", fmt(1 / lr_res$popfreq))
   })
@@ -875,6 +936,10 @@ server <- function(input, output, session) {
     helix_var <- helix_d_SNV |> mutate(Var = paste0(Position, Profile)) |> pull(Var)
     gnomAD_d_SNV <- req(gnomAD_rare_SNV())
     gnomAD_var <- gnomAD_d_SNV |> mutate(Var = paste0(Position, Profile)) |> pull(Var)
+    
+    if (is.null(gnomAD_d_SNV)) {
+      return(NULL)
+    }
     
     if (helix_var != gnomAD_var) {
       return(NULL)
@@ -912,6 +977,9 @@ server <- function(input, output, session) {
     gnomAD_d_SNV <- req(gnomAD_rare_SNV())
     gnomAD_var <- gnomAD_d_SNV |> mutate(Var = paste0(Position, Profile)) |> pull(Var)
     
+    if (is.null(gnomAD_d_SNV)) {
+      return("GnomAD did not contain information about the selected TLHG.")
+    }
     
     if (helix_var != gnomAD_var) {
       return(paste0("HelixMTdb and GnomAD chose different variants, hence a pooled estimate is not available."))
